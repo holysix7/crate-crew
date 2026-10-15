@@ -1,0 +1,9 @@
+node_modules/
+re/
+*.bin
+*.cue
+*.iso
+*.elf
+disc/
+tex/
+.DS_Store

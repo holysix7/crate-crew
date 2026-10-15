@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Crate Crew</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <canvas id="hud"></canvas>
+  <div id="orders" class="orders hidden">
+    <b>Rakit di pad</b><div id="ob"></div>
+    <b>Pasukan</b><div id="om"></div>
+  </div>
+
+  <div id="lobby" class="overlay">
+    <div class="card">
+      <h1>CRATE<span>CREW</span></h1>
+      <p class="sub">Fan-remake LAN · terinspirasi Team Buddies (PS1)</p>
+
+      <div id="join-view">
+        <label for="name">Nama</label>
+        <input id="name" maxlength="14" placeholder="Nama kamu" autocomplete="off">
+
+        <label>Tim</label>
+        <div id="teams" class="teams"></div>
+
+        <label>Grafis <small class="muted">(Rendah = paling ringan · bisa diganti di game dengan <kbd>G</kbd>)</small></label>
+        <div id="quality" class="teams"></div>
+
+        <button id="join" class="big" disabled>MASUK RUANG TUNGGU</button>
+      </div>
+
+      <div id="room-view" hidden>
+        <label>Peta</label>
+        <div id="maps" class="teams"></div>
+        <label>Ruang tunggu <small class="muted">· klik tim untuk pindah</small></label>
+        <div id="room" class="room"></div>
+        <label class="check"><input type="checkbox" id="cpu"> Isi tim kosong dengan CPU <small class="muted">(kalau mati, tim tanpa pemain langsung gugur)</small></label>
+        <button id="ready" class="big">SIAP!</button>
+      </div>
+      <p id="status" class="status">Menghubungkan ke server…</p>
+
+      <div class="howto">
+        <b>Cara main</b>
+        <p>Peti jatuh dari langit di tengah peta. Angkat peti, bawa ke <i>pad</i> 2×2 di samping markasmu, susun, lalu rakit:</p>
+        <ul>
+          <li><b>1 peti</b> → senjata acak (SMG / Shotgun / Bazooka)</li>
+          <li><b>4 peti</b> → rekrut Buddy (bot) baru</li>
+          <li><b>8 peti</b> (2 tingkat) → Turret, Tank, atau Jeep</li>
+        </ul>
+        <p><b>Awas:</b> monster raksasa menjaga zona peti, lubang besar berarti tewas, dan sesekali hujan meteor jatuh — lihat lingkaran merah! Dari atas bukit tembakanmu lebih jauh.</p>
+        <p>Ronde dimulai saat semua pemain menekan <b>Siap</b>. Setiap tim mulai tanpa Buddy — rakit sendiri dari peti. Hancurkan markas musuh untuk menang. Peti di pad musuh bisa dicuri!</p>
+        <p><b>8 peti</b> juga bisa jadi <b>Tank</b> (lambat, tebal, meriam) atau <b>Jeep</b> (cepat, senapan mesin, bisa menabrak). Dekati kendaraan timmu lalu tekan <kbd>E</kbd> untuk naik/turun; tanpa pengemudi kendaraan bergerak sendiri mengikuti perintah pasukan.</p>
+        <p><b>Perintah tim</b> (panel kiri): apa yang dirakit (<kbd>1</kbd> otomatis · <kbd>2</kbd> senjata · <kbd>3</kbd> Buddy · <kbd>4</kbd> Turret · <kbd>5</kbd> Tank · <kbd>6</kbd> Jeep), lalu tugas pasukan (<kbd>Z</kbd> ikuti aku · <kbd>X</kbd> bertahan · <kbd>C</kbd>…<kbd>N</kbd> serang markas tertentu).</p>
+        <p class="keys"><kbd>WASD</kbd> gerak · <kbd>Mouse</kbd> bidik · <kbd>Klik</kbd> tembak · <kbd>E</kbd> angkat/taruh · <kbd>F</kbd>/<kbd>Klik kanan</kbd> lempar · <kbd>Q</kbd> rakit · <kbd>Tab</kbd> skor · <kbd>M</kbd> suara · <kbd>G</kbd> grafis</p>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="client.js"></script>
+</body>
+</html>
