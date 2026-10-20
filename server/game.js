@@ -3,6 +3,7 @@
 
 const { ArenaEvents, EVENT_RULES } = require('./arena-events');
 const { Encounters } = require('./encounters');
+const { RectIndex } = require('./spatial-index');
 
 const EVENT_OPTIONS = [
   { id: 'meteor', name: 'Hujan Meteor' }, { id: 'supply', name: 'Kiriman Peti' }, { id: 'rage', name: 'Monster Mengamuk' },
@@ -170,6 +171,7 @@ class Game {
     this.cpu = true; // tim tanpa pemain diisi 1 komandan CPU
     this.eventsEnabled = true;
     this.eventMask = ALL_EVENTS_MASK;
+    this.networkTick = 0; this.networkState = '';
     this.master = 0; // id pemain room master (memilih peta, CPU, bisa mengeluarkan pemain)
     this.setMap(0);
     this.toLobby();
@@ -181,6 +183,8 @@ class Game {
     const geometry = MAP_GEOMETRY[i], m = { ...geometry, bases: geometry.bases.slice(0, this.teams) };
     this.walls = m.walls; this.bases = m.bases; this.hills = m.hills; this.pits = m.pits; this.hazards = m.hazards; this.bridges = m.bridges; this.outside = m.outside; this.arenaMask = m.arenaMask;
     this.solids = [...this.walls, ...this.bases.map(b => b.hq)];
+    this.solidIndex = new RectIndex(this.solids,W,H);
+    this.wallIndex = new RectIndex(this.walls,W,H);
     const d = MAPS[i];
     this.mapMeta = { w: W, h: H, tile: T, walls: this.walls, bases: this.bases, crateH: CRATE_H,
       hills: this.hills, pits: this.pits, hazards: this.hazards, bridges: this.bridges, outside: this.outside, desc: d.desc, tag: d.tag,
@@ -200,6 +204,8 @@ class Game {
     if (!cached) MAP_BLOCKED.set(blockKey, new Uint8Array(this.blocked));
   }
   mapInfo() { return this.mapMeta; }
+  nearSolids(x,y,pad=0) { return this.solidIndex.items === this.solids ? this.solidIndex.near(x,y,pad) : this.solids; }
+  nearWalls(x,y) { return this.wallIndex.items === this.walls ? this.wallIndex.near(x,y) : this.walls; }
   welcome() {
     return JSON.stringify({
       t: 'welcome', teams: this.teams, colors: TEAM_COLORS.slice(0, this.teams), names: TEAM_NAMES.slice(0, this.teams), weapons: WLIST,
@@ -341,6 +347,22 @@ class Game {
     this.events.push({ k: 'eventcfg', n: p.name, name, v: m.enabled });
     return true;
   }
+  configureTeams(p, m) {
+    if (!['lobby','countdown'].includes(this.state) || !this.isMaster(p,'mengatur jumlah tim')) return false;
+    const count=m.count;
+    if (!Number.isInteger(count) || count<2 || count>4 || count===this.teams) return false;
+    const counts=Array(count).fill(0);
+    for (const q of this.players.values()) if(q.team<count) counts[q.team]++;
+    for (const q of this.players.values()) {
+      if(q.team>=count) { q.team=counts.indexOf(Math.min(...counts)); counts[q.team]++; }
+      q.input={mx:0,my:0,a:0,fire:false}; q.acts=[];
+    }
+    this.teams=count; this.setMap(this.mapIdx); this.toLobby();
+    const welcome=this.welcome(); for(const c of this.conns)c.send(welcome);
+    for(const q of this.players.values())q.conn.send(JSON.stringify({t:'joined',id:q.id,team:q.team}));
+    this.events.push({k:'teamcfg',n:p.name,count}); this.broadcast(true);
+    return true;
+  }
   findPlayer(name) {
     const q = name.trim().toLowerCase(), ps = [...this.players.values()];
     return ps.find(p => p.name.toLowerCase() === q) || ps.find(p => p.name.toLowerCase().startsWith(q)) || null;
@@ -398,9 +420,11 @@ class Game {
     } else if (m.t === 'master') {
       this.giveMaster(p, this.players.get(m.id));
     } else if (this.state === 'lobby' || this.state === 'countdown') {
+      const before=[p.ready,p.team,this.mapIdx,this.cpu,this.eventMask,this.eventsEnabled];
       // aksi ruang tunggu
       if (m.t === 'ready') p.ready = !!m.v;
       else if (m.t === 'events') this.configureEvents(p, m);
+      else if (m.t === 'teams') return this.configureTeams(p, m);
       else if (m.t === 'team' && Number.isInteger(m.team) && m.team >= 0 && m.team < this.teams && m.team !== p.team) {
         p.team = m.team; p.ready = false;
       } else if ((m.t === 'map' || m.t === 'cpu') && !this.isMaster(p, m.t === 'map' ? 'memilih peta' : 'mengatur CPU')) {
@@ -417,6 +441,8 @@ class Game {
         for (const q of this.players.values()) q.ready = false; // aturan berubah → konfirmasi ulang
         this.events.push({ k: 'cpu', n: p.name, v: this.cpu });
       }
+      const after=[p.ready,p.team,this.mapIdx,this.cpu,this.eventMask,this.eventsEnabled];
+      if(before.some((value,i)=>value!==after[i]))this.broadcast(true);
     }
   }
   lobbyTick(dt) {
@@ -918,7 +944,7 @@ class Game {
     const d = Math.hypot(x2 - x1, y2 - y1), n = Math.ceil(d / 12);
     for (let i = 1; i < n; i++) {
       const px = x1 + ((x2 - x1) * i) / n, py = y1 + ((y2 - y1) * i) / n;
-      for (const s of this.solids) if (s !== ignore && inRect(px, py, s, pad)) return false;
+      for (const s of this.nearSolids(px,py,pad)) if (s !== ignore && inRect(px, py, s, pad)) return false;
       if (pad && this.inPit(px, py, -pad - 4)) return false;
     }
     return true;
@@ -1188,8 +1214,9 @@ class Game {
     const list = [...this.units.values()].filter(u => !u.abducted && !u.fly);
     for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
       const a = list[i], b = list[j];
-      const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), R = a.r + b.r;
-      if (d >= R || d === 0) continue;
+      const dx = b.x - a.x, dy = b.y - a.y, d2 = dx*dx+dy*dy, R = a.r + b.r;
+      if (d2 >= R*R || d2 === 0) continue;
+      const d = Math.sqrt(d2);
       const ma = mass(a), mb = mass(b);
       if (ma === Infinity && mb === Infinity) continue;
       // yang lebih berat terdorong lebih sedikit
@@ -1251,7 +1278,7 @@ class Game {
       let dead = false;
       for (let s = 0; s < 3 && !dead; s++) {
         bl.x += (bl.vx * dt) / 3; bl.y += (bl.vy * dt) / 3;
-        for (const w of this.walls) if (inRect(bl.x, bl.y, w)) { dead = true; break; }
+        for (const w of this.nearWalls(bl.x,bl.y)) if (inRect(bl.x, bl.y, w)) { dead = true; break; }
         if (!dead) for (const b of this.bases) if (inRect(bl.x, bl.y, b.hq)) {
           dead = true;
           if (b.team !== bl.team && !bl.rocket) this.damageHQ(b.team, bl.dmg * 0.5);
@@ -1306,10 +1333,17 @@ class Game {
       M: this.meteors.map(m => [m.id, r1(m.x), r1(m.y), +m.t.toFixed(2), m.r]),
     });
   }
-  broadcast() {
-    const s = this.snapshot();
-    this.events = [];
-    for (const c of this.conns) if (c.backlog < 512 * 1024) c.send(s);
+  broadcast(force = false) {
+    // Simulation stays 30 Hz. Interpolated world snapshots use 15 Hz in a match,
+    // 5 Hz in the lobby; state changes and explicit room updates are immediate.
+    if (!this.conns.size) { this.events = []; return; }
+    const stride = this.state === 'playing' ? 2 : 6;
+    if (!force && this.state === this.networkState && ++this.networkTick < stride) return;
+    this.networkTick = 0; this.networkState = this.state;
+    const recipients = [...this.conns].filter(c=>c.backlog < 512*1024);
+    if (!recipients.length) { this.events=[]; return; }
+    const s = this.snapshot(); this.events = [];
+    for (const c of recipients) c.send(s);
   }
 }
 

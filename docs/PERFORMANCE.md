@@ -58,3 +58,50 @@ These are resource and allocation measurements, not an FPS claim. The browser ru
 Chrome confirmed **11,011 terrain vertices** and a **2048 × 1536 ground texture** on each of the six maps. Two consecutive cycles switching away from and back to Sungai Kembar ended at exactly **36 registered GPU geometries and 5 textures** in the same lobby view (28 draw calls each), with no resource growth, browser errors, or failed assets. Previews are drawn from geometry; the six maps require no separate map-image downloads.
 
 A same-scene Chrome comparison on Lembah Benteng temporarily rebuilt the **76 wall rectangles** as separate meshes, using the same material, geometry and overview camera. Total draw calls were **181 with separate walls versus 106 with the merged mesh**: exactly **75 fewer calls** (76 wall calls → 1). After the temporary comparison meshes were disposed, registered geometry returned to **65 → 65**. This comparison changes only wall batching; it does not compare different maps or player counts.
+
+## Dense loot, projectiles and long sessions
+
+Compared with commit `1d261be`, using the same camera, low graphics, Chrome/SwiftShader, 1280 × 900 and identical authoritative fixture data:
+
+| Measurement | Before | After |
+|---|---:|---:|
+| Total scene draw calls: 120 crates, 30 SMG pickups, 100 ordinary/laser bullets | 524 | 29 |
+| Registered geometries in that scene | 18 | 18 |
+| Registered textures in that scene | 5 | 5 |
+| Mixed actor replacement: first wave geometries | 63 | 63 |
+| Mixed actor replacement: second wave geometries | 107 | 63 |
+
+That is **94.5% fewer draw calls in this stress scene**, with the same item counts. A second case grew to **180 crates** and still rendered every crate. GPU buffers grow geometrically and dispose replaced instance buffers. Wood, metal, bands, crossbars, shadows, pickups by weapon, and ordinary/laser bullets use separate material batches. Slow projectiles retain their individual animation/effects. Small arena-wide instance batches replace per-item traversal/culling; no distant gameplay objects are discarded.
+
+The mixed wave contains tanks, jeeps, a monster, humans and a turret. Private geometry/materials and cloned tread textures are released on despawn; map-owned resources remain shared. Previously, only encounters with explicit ownership flags were cleaned on ordinary despawn, leaving vehicle and other private geometry registered until later teardown. Growth from 63 to 107 is for this specific replacement wave, not every unit death.
+
+## Server and network
+
+A deterministic workload runs **900 simulation ticks** (30 simulated seconds), four teams, 32 initial bots, 250 initial bullets and one writable client. Each version has one warmup and five measured runs. Comparison source: `1d261be:server/game.js`.
+
+| Measurement | Before | After |
+|---|---:|---:|
+| Median elapsed time for 900 ticks | 661.72 ms | 357.56 ms |
+| World snapshot packets | 900 | 450 |
+| Serialized snapshot bytes | 3,671,504 | 1,853,798 |
+| Final gameplay snapshot hash | identical | identical |
+
+This local workload used **46.0% less server time** and **49.5% fewer snapshot bytes**. Final gameplay fields match after excluding the transient event queue, whose delivery is deliberately batched. These timings vary with hardware and workload; they are not a browser FPS measurement or a guarantee for every match.
+
+Static wall/solid indexes restrict projectile and line-of-sight tests to nearby rectangles; tests compare indexed results with full scans across map/cell edges. Unit separation rejects distant pairs with squared distance before computing a square root. Serialization is skipped without writable recipients.
+
+Simulation remains **30 Hz**. Playing snapshots use **15 Hz**, lobby snapshots **5 Hz**, with the existing 75 ms client interpolation. Phase transitions and accepted room configuration/Ready changes bypass the cadence. Events accumulate until the next sent snapshot and are delivered once; they are not cleared on skipped ticks. Backpressured clients retain the previous snapshot-skipping policy. Changed input still samples at 30 Hz; identical input uses a **250 ms heartbeat**. Browser checks observed five input packets over 1.2 idle seconds, then confirmed real movement, E weapon swapping, sustained firing and stopping on release.
+
+Reproduce the server comparison from the repository root:
+
+```bash
+git show 1d261be:server/game.js > /tmp/crate-crew-baseline-game.js
+BASELINE_GAME=/tmp/crate-crew-baseline-game.js node benchmarks/server.js
+node benchmarks/server.js
+```
+
+[Raw measurements](benchmarks/optimization-results.json) retain all five timing samples, hashes, packet/byte counts and browser resource counts. Room tests cover master-only 2–4 team selection, balanced reassignment, Ready/countdown cancellation, settings persistence and in-match rejection. Browser checks exercise the actual room UI, two WebSocket clients, world rebuilding when the map ID stays the same, and mobile layout.
+
+## Phaser assessment
+
+[Phaser describes itself as a 2D framework](https://github.com/phaserjs/phaser). This client uses Three.js meshes, 3D terrain, a perspective camera, lighting and shadows. Adding Phaser would leave those rendering hot paths in place; replacing them would require a substantial rendering port. This PR keeps the existing engine and addresses the measured draw calls, resource lifetime, wall queries and network serialization directly, with no new runtime library.

@@ -13,8 +13,8 @@ Butuh **Node.js 18+** (`brew install node` atau dari nodejs.org). Tidak ada `npm
 
 ```bash
 cd team-buddies
-node server.js            # 2 tim
-TEAMS=4 node server.js    # 4 tim (Merah, Biru, Hijau, Kuning)
+node server.js            # awalnya 2 tim
+TEAMS=4 node server.js    # awalnya 4 tim (Merah, Biru, Hijau, Kuning)
 PORT=3000 node server.js  # ganti port
 EVENT_PREVIEW=train,mbg,ufo,airdrop,chickens,lord node server.js # preview event berurutan; mulai 8 detik setelah Siap
 ```
@@ -71,7 +71,9 @@ Lobby menampilkan preview geometri keenam peta dengan posisi empat markas. **Sun
 
 **Ruang tunggu**: setelah memasukkan nama, semua pemain masuk ruang tunggu (klik kolom tim untuk pindah tim). Ronde baru dimulai (hitung mundur 3 detik) saat **semua** pemain menekan **SIAP**; batal siap menghentikan hitung mundur. Setiap tim mulai **tanpa Buddy** — hanya pemainnya. Opsi *Isi tim kosong dengan CPU* (bawaan aktif): tim tanpa pemain mendapat 1 komandan CPU yang mengumpulkan peti & merakit, dan muncul lagi bila tewas; bila dimatikan, tim kosong langsung gugur (butuh pemain di minimal 2 tim). Selesai ronde, semua kembali ke ruang tunggu.
 
-**Room master** 👑: pemain pertama yang masuk. Hanya room master yang memilih peta dan mengatur opsi CPU; di ruang tunggu ia melihat tombol ✕ (keluarkan pemain) dan 👑 (serahkan master) di samping nama pemain lain. Bisa juga lewat chat: `/kick nama`, `/master nama` (nama boleh awalan saja). Bila room master keluar, jabatan pindah ke pemain yang paling lama di ruangan.
+**Room master** 👑: pemain pertama yang masuk. Hanya room master yang memilih peta, jumlah tim (2–4), event, dan opsi CPU; di ruang tunggu ia melihat tombol ✕ (keluarkan pemain) dan 👑 (serahkan master) di samping nama pemain lain. Bisa juga lewat chat: `/kick nama`, `/master nama` (nama boleh awalan saja). Bila room master keluar, jabatan pindah ke pemain yang paling lama di ruangan.
+
+**Jumlah tim (room master)**: tombol **2 tim / 3 tim / 4 tim** di lobby menentukan jumlah markas aktif. Pemain dari tim yang ditutup dipindah ke tim tersisa dengan anggota paling sedikit; identitas/master tetap. Semua Siap dan countdown dibatalkan. Peta, CPU, dan pilihan event bertahan; pengaturan tidak bisa diubah saat bertanding. `TEAMS` hanya menentukan nilai awal server.
 
 **Event acak (room master)**: di lobby, gunakan sakelar utama untuk semua event atau buka *Pilih event yang boleh muncul* untuk menyalakan/mematikan 12 event satu per satu. Pemain lain hanya melihat pilihan. Perubahan membatalkan Siap/countdown; pengaturan bertahan antar-ronde, ganti peta, dan pergantian master. Event yang dimatikan juga dilewati oleh preview. Peti rutin dan monster penjaga tetap ada.
 
@@ -111,24 +113,27 @@ Tim tanpa pemain manusia dimainkan komandan CPU (mengumpulkan peti, merakit, men
 ```
  Browser (tiap pemain)                         Komputer host (Mac kamu)
  ┌───────────────────────────┐   WebSocket    ┌──────────────────────────────┐
- │ client.js                 │  input 30Hz →  │ server.js  (HTTP + WS mini)  │
+ │ client.js                 │  input ≤30Hz →  │ server.js  (HTTP + WS mini)  │
  │  • kirim input (WASD,aim) │                │ server/game.js               │
- │  • interpolasi snapshot   │ ← snapshot 30Hz│  • simulasi authoritative    │
+ │  • interpolasi snapshot   │ ← snapshot 15Hz│  • simulasi authoritative    │
  │  • render 3D (WebGL)      │                │  • fisika peti, peluru, AI   │
  │  • HUD, minimap, suara    │                │  • aturan pad, markas, ronde │
  └───────────────────────────┘                └──────────────────────────────┘
 ```
 
 * **Server authoritative**: semua aturan di `server/game.js`; client hanya menggambar → tidak bisa curang dari browser, dan sinkron untuk semua pemain.
-* **Interpolasi 75 ms** di client supaya gerakan halus walau snapshot 30 Hz.
+* **Interpolasi 75 ms** di client supaya gerakan halus walau snapshot 15 Hz (lobby 5 Hz). Simulasi tetap 30 Hz; pergantian fase dan aturan lobby dikirim segera. Input identik dikirim ulang sebagai heartbeat 250 ms; input yang berubah dan aksi E/F/Q tidak ditahan.
 * **Tampilan 3D (three.js)**: kamera perspektif miring 56° mengikuti pemain, cahaya matahari + bayangan, partikel & ledakan 3D. Semua tekstur (peti kayu, tembok batu, bata markas, rumput, pasir, pad) **digambar lewat kode** di canvas, bukan dari file. HUD, nama, dan bar HP digambar di kanvas 2D terpisah di atasnya. Dunia server tetap 2D (x, y) + tinggi z; client memetakannya ke 3D.
-* **Peta simetris**: rintangan didefinisikan untuk satu kuadran lalu dicerminkan → adil untuk 2 atau 4 tim.
-* **AI bot**: peran *gather* (kumpulkan peti → rakit), *escort* (ikuti pemain), dan serang markas; pathfinding BFS di grid 48×36.
+* **Peta simetris**: rintangan didefinisikan untuk satu kuadran lalu dicerminkan → adil untuk 2, 3, atau 4 tim.
+* **AI bot**: peran *gather* (kumpulkan peti → rakit), *escort* (ikuti pemain), dan serang markas; pathfinding BFS di grid 72×54 dengan buffer yang digunakan ulang dan grid rintangan yang disimpan per peta/jumlah tim.
 
 | File | Isi |
 |---|---|
 | `server.js` | HTTP statis + WebSocket minimal (RFC 6455) + loop 30 Hz |
-| `server/game.js` | simulasi game dan penjadwalan event |
+| `server/game.js` | simulasi game, konfigurasi ruang, snapshot, dan penjadwalan event |
+| `server/maps.js` | enam arena dan batas berlekuk simetris |
+| `server/spatial-index.js` | indeks tembok untuk pemeriksaan peluru dan garis pandang |
+| `public/instance-batch.js` | batch GPU untuk peti, pickup, peluru dan laser |
 | `server/arena-events.js` | rotasi event, fisika bencana, distribusi loot simetris, dan tujuan menghindar bot |
 | `server/encounters.js` | UFO, ayam, LORD, airdrop, loot monster, peti metal |
 | `public/encounters.js` | model dan animasi prosedural UFO, ayam, LORD, helikopter, dan paket airdrop |
@@ -213,10 +218,12 @@ Tes simulasi menggunakan test runner bawaan Node, tanpa `npm install`:
 node --test
 ```
 
-Cakupan: fase peringatan, gaya tarik dan massa, lengkungan peluru, jalur api, perlindungan bukit, damage tsunami sekali per unit, hadiah peti, tabrakan, bot menghindar, sinkronisasi pemain baru, reset ronde, penculikan/penyelamatan UFO, klaim airdrop, invasi ayam, buff LORD tanpa transfer saat mati, peti metal, loot monster, serta semua event di setiap peta untuk 2 dan 4 tim.
+Cakupan: fase peringatan, gaya tarik dan massa, lengkungan peluru, jalur api, perlindungan bukit, damage tsunami sekali per unit, hadiah peti, tabrakan, bot menghindar, sinkronisasi pemain baru, reset ronde, penculikan/penyelamatan UFO, klaim airdrop, invasi ayam, buff LORD tanpa transfer saat mati, peti metal, loot monster, serta semua event di setiap peta untuk 2, 3, dan 4 tim. Tes juga mencakup konfigurasi tim, remap pemain, otorisasi, cadence snapshot, antrean event, dan kesetaraan indeks tembok dengan pemeriksaan penuh.
 
 ## Loading dan performa
 
 Aset teks dikirim dengan gzip bila browser mendukungnya, hasil kompresi dipakai ulang, dan ETag mengizinkan respons 304 tanpa mengunduh ulang aset yang belum berubah. File yang diedit tetap terdeteksi melalui metadata file; tidak ada build atau dependensi tambahan. Library three.js dimuat lebih awal lewat module preload.
 
 Bentuk senjata/Buddy dan geometri/material pickup digunakan bersama agar spawn/despawn loot tidak terus membuat resource GPU baru. Resource dunia dibersihkan saat berganti peta. Tembok statis digabung menjadi satu mesh; kanal dan jembatan juga digabung per material. Grid tanah dibatasi 11.011 vertex, tekstur tanah maksimal 2048 × 1536, dan buffer pencarian jalur bot dipakai ulang. Normal permukaan tsunami dihitung maksimal 15 kali/detik; gerakan air tetap diperbarui setiap frame. Lobby/panel patch notes dibatasi 30 FPS, sedangkan render tab tersembunyi dilewati dan input dilepas. Simulasi server tetap 30 tick/detik; resolusi dan kontrol kualitas tidak berubah.
+
+Peti, pickup, peluru biasa, dan laser kini memakai GPU instancing; buffer tumbuh tanpa membuang objek. Geometri, material, dan tekstur privat unit/efek dibersihkan saat despawn. Peluru dan garis pandang memakai indeks spasial tembok. Snapshot pertandingan 15 Hz dan lobby 5 Hz mengurangi serialisasi/data; simulasi tetap 30 Hz. Lihat [hasil benchmark dan batas pengukuran](docs/PERFORMANCE.md) serta [data mentah](docs/benchmarks/optimization-results.json). Benchmark server dapat diulang dengan `node benchmarks/server.js`.

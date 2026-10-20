@@ -75,3 +75,16 @@ All six arenas are 72 × 54 tiles with mirrored, irregular outlines. Full-map ca
 | [Map patch notes](patch-notes-maps.jpg) | All six maps, irregular outlines, hazards and four-team balance in dashboard notes |
 
 Browser verification covers master-only selection, both clients receiving the new map, retained event settings, a live tsunami announcement on the river map, mobile layout, and stable graphics resources after repeated map switches. The server suite checks every event across the full rotation; see [map guide](../MAPS.md) and [performance evidence](../PERFORMANCE.md).
+
+## Optimization and team configuration
+
+| Capture | What it shows |
+|---|---|
+| [Dense instancing fixture](optimization-instancing.jpg) | 120 crates, 30 weapon pickups and 100 ordinary/laser bullets; same-scene calls fall from 524 to 29 |
+| [Four teams](team-settings-four.jpg) | Master-only 2 / 3 / 4 team buttons above the six maps |
+| [Two teams](team-settings-two.jpg) | Two active bases and team columns after changing the room |
+| [Mobile team settings](team-settings-mobile.jpg) | Team count controls and map cards fit a 390px screen |
+| [Normal weapon interaction](optimization-gameplay.jpg) | Real movement and E swap equip SMG in a two-team round |
+| [Optimization notes](patch-notes-optimization.jpg) | Player-facing network, rendering and resource cleanup notes |
+
+Two actual clients verified guest rejection, reassignment from a closed team, Ready/countdown reset, preserved event choices, and 4→2→3→4 world rebuilding. Controlled browser comparisons verified instance growth without dropped items and stable actor resources after replacement. These draw-call and resource checks do not claim a measured FPS percentage.

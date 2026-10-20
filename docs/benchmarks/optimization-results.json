@@ -1,0 +1,226 @@
+{
+  "baselineCommit": "1d261be4da3fe2804e789211800615e7b94f4898",
+  "measuredOn": "2026-10-20",
+  "server": {
+    "method": "One warmup plus five 900-tick seeded four-team runs; 32 initial bots and 250 initial bullets; one writable connection. Final gameplay snapshot excludes transient event delivery queue.",
+    "baseline": {
+      "medianMs": 661.72,
+      "runs": [
+        {
+          "ticks": 900,
+          "ms": 733.04,
+          "packets": 900,
+          "bytes": 3671504,
+          "units": 36,
+          "crates": 28,
+          "stateHash": "4bc8642ab402f32900a519de5811adb75b81a89022c34ca957049eb7d6a7cdf8"
+        },
+        {
+          "ticks": 900,
+          "ms": 665.99,
+          "packets": 900,
+          "bytes": 3671504,
+          "units": 36,
+          "crates": 28,
+          "stateHash": "4bc8642ab402f32900a519de5811adb75b81a89022c34ca957049eb7d6a7cdf8"
+        },
+        {
+          "ticks": 900,
+          "ms": 649.36,
+          "packets": 900,
+          "bytes": 3671504,
+          "units": 36,
+          "crates": 28,
+          "stateHash": "4bc8642ab402f32900a519de5811adb75b81a89022c34ca957049eb7d6a7cdf8"
+        },
+        {
+          "ticks": 900,
+          "ms": 661.72,
+          "packets": 900,
+          "bytes": 3671504,
+          "units": 36,
+          "crates": 28,
+          "stateHash": "4bc8642ab402f32900a519de5811adb75b81a89022c34ca957049eb7d6a7cdf8"
+        },
+        {
+          "ticks": 900,
+          "ms": 660.68,
+          "packets": 900,
+          "bytes": 3671504,
+          "units": 36,
+          "crates": 28,
+          "stateHash": "4bc8642ab402f32900a519de5811adb75b81a89022c34ca957049eb7d6a7cdf8"
+        }
+      ]
+    },
+    "optimized": {
+      "medianMs": 357.56,
+      "runs": [
+        {
+          "ticks": 900,
+          "ms": 395.9,
+          "packets": 450,
+          "bytes": 1853798,
+          "units": 36,
+          "crates": 28,
+          "stateHash": "4bc8642ab402f32900a519de5811adb75b81a89022c34ca957049eb7d6a7cdf8"
+        },
+        {
+          "ticks": 900,
+          "ms": 359.85,
+          "packets": 450,
+          "bytes": 1853798,
+          "units": 36,
+          "crates": 28,
+          "stateHash": "4bc8642ab402f32900a519de5811adb75b81a89022c34ca957049eb7d6a7cdf8"
+        },
+        {
+          "ticks": 900,
+          "ms": 354.85,
+          "packets": 450,
+          "bytes": 1853798,
+          "units": 36,
+          "crates": 28,
+          "stateHash": "4bc8642ab402f32900a519de5811adb75b81a89022c34ca957049eb7d6a7cdf8"
+        },
+        {
+          "ticks": 900,
+          "ms": 357.56,
+          "packets": 450,
+          "bytes": 1853798,
+          "units": 36,
+          "crates": 28,
+          "stateHash": "4bc8642ab402f32900a519de5811adb75b81a89022c34ca957049eb7d6a7cdf8"
+        },
+        {
+          "ticks": 900,
+          "ms": 352.35,
+          "packets": 450,
+          "bytes": 1853798,
+          "units": 36,
+          "crates": 28,
+          "stateHash": "4bc8642ab402f32900a519de5811adb75b81a89022c34ca957049eb7d6a7cdf8"
+        }
+      ]
+    }
+  },
+  "browser": {
+    "method": "Chrome, SwiftShader, low quality, 1280 x 900; same camera and wire state; draw calls/resources, not an FPS benchmark.",
+    "measurements": {
+      "before": {
+        "calls": 524,
+        "geometries": 18,
+        "textures": 5,
+        "teams": 4,
+        "renderTeams": 4,
+        "crates": 120,
+        "pickups": 30,
+        "bullets": 100,
+        "batches": null
+      },
+      "after": {
+        "calls": 29,
+        "geometries": 18,
+        "textures": 5,
+        "teams": 4,
+        "renderTeams": 4,
+        "crates": 120,
+        "pickups": 30,
+        "bullets": 100,
+        "batches": {
+          "wood": 90,
+          "metal": 30,
+          "shadow": 106,
+          "pickup": 30,
+          "bullets": 50,
+          "lasers": 50,
+          "capacity": 128
+        }
+      },
+      "grown": {
+        "calls": 29,
+        "geometries": 18,
+        "textures": 5,
+        "teams": 4,
+        "renderTeams": 4,
+        "crates": 180,
+        "pickups": 30,
+        "bullets": 100,
+        "batches": {
+          "wood": 135,
+          "metal": 45,
+          "shadow": 160,
+          "pickup": 30,
+          "bullets": 50,
+          "lasers": 50,
+          "capacity": 256
+        }
+      },
+      "actorBefore": [
+        {
+          "calls": 142,
+          "geometries": 63,
+          "textures": 8,
+          "teams": 4,
+          "renderTeams": 4,
+          "crates": 0,
+          "pickups": 0,
+          "bullets": 0,
+          "batches": null
+        },
+        {
+          "calls": 142,
+          "geometries": 107,
+          "textures": 8,
+          "teams": 4,
+          "renderTeams": 4,
+          "crates": 0,
+          "pickups": 0,
+          "bullets": 0,
+          "batches": null
+        }
+      ],
+      "actorAfter": [
+        {
+          "calls": 142,
+          "geometries": 63,
+          "textures": 8,
+          "teams": 4,
+          "renderTeams": 4,
+          "crates": 0,
+          "pickups": 0,
+          "bullets": 0,
+          "batches": {
+            "wood": 0,
+            "metal": 0,
+            "shadow": 0,
+            "pickup": 0,
+            "bullets": 0,
+            "lasers": 0,
+            "capacity": 256
+          }
+        },
+        {
+          "calls": 142,
+          "geometries": 63,
+          "textures": 8,
+          "teams": 4,
+          "renderTeams": 4,
+          "crates": 0,
+          "pickups": 0,
+          "bullets": 0,
+          "batches": {
+            "wood": 0,
+            "metal": 0,
+            "shadow": 0,
+            "pickup": 0,
+            "bullets": 0,
+            "lasers": 0,
+            "capacity": 256
+          }
+        }
+      ],
+      "idlePackets": 5
+    }
+  }
+}
