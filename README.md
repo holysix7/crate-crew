@@ -36,8 +36,8 @@ Di macOS, saat pertama kali jalan akan muncul dialog firewall *"Allow incoming c
 | WASD / panah | gerak |
 | Mouse | bidik |
 | Klik kiri (tahan) | tembak |
-| E | angkat peti / taruh di pad / curi dari pad musuh / naik & turun kendaraan |
-| F / klik kanan | lempar peti (bisa mengenai musuh: *BONK!*) |
+| E | angkat peti / taruh di pad / curi dari pad musuh / naik & turun kendaraan; dengan **Friendly fire**: angkat pemain terdekat (E lagi = turunkan) |
+| F / klik kanan | lempar peti (bisa mengenai musuh: *BONK!*); dengan **Friendly fire**: lempar pemain yang diangkat (−15 HP, −25 HP unit yang tertabrak, lubang = tewas) |
 | Q | rakit di pad sendiri |
 | R | buku resep pola susunan |
 | Enter / Shift+Enter | chat semua / chat tim (Tab di kolom chat = ganti, Esc = batal) |
@@ -85,6 +85,8 @@ Di macOS, saat pertama kali jalan akan muncul dialog firewall *"Allow incoming c
 | 8 peti (2 tingkat penuh) | Turret, Tank, atau Jeep |
 
 Susunan yang tidak cocok resep: ≥4 peti → Buddy, selain itu → senjata acak dari 1 peti teratas. Perintah *Senjata* tetap memakai pola bila cocok; perintah Buddy/Turret/Tank/Jeep mengabaikan pola. Bot mengisi petak berurutan (berjajar → L → rata), jadi kadang ikut merakit Sniper/Minigun.
+
+**Friendly fire** (opsi room master di ruang tunggu, default mati): peluru, ledakan, peti lempar, tabrakan kendaraan, dan tebasan LORD ikut melukai satu tim (tidak pernah diri sendiri; teamkill tidak menambah skor). Pemain bisa **E** mengangkat unit infanteri terdekat (teman atau musuh; bukan yang berperisai spawn / LORD) lalu **F** melemparnya. Diangkat maksimal 5 detik dan kebal selama diangkat/terbang; mendarat −15 HP, menabrak unit lain −25 HP, mendarat di lubang = tewas.
 
 **HP / tablet** (layar sentuh, terdeteksi otomatis): stik kiri = gerak, stik kanan = bidik (didorong jauh = menembak; tanpa stik kanan pemain menghadap arah jalan). Tombol **E / F / Q** di kanan, menu atas: Perintah, Resep, Skor, Chat, layar penuh. Main dalam posisi *landscape*.
 

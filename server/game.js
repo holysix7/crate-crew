@@ -30,6 +30,8 @@ const WLIST = Object.keys(WEAPONS);
 const KIND = { human: 0, bot: 1, turret: 2, tank: 3, jeep: 4, monster: 5, ufo: 6, chicken: 7, lord: 8 };
 const UNIT_R = 14, HQ_HP = 3200, UNIT_HP = 100, TURRET_HP = 260, CRATE_H = 24, CARRY_Z = 44;
 const MAX_TEAM_UNITS = 8, MAX_TURRETS = 3, MAX_VEHICLES = 2, ROUND_TIME = 600, RESPAWN = 4;
+// Friendly fire: angkat (E) & lempar (F) pemain. Lempar = kecepatan datar, kecepatan naik; damage ke yang dilempar / yang ditabrak
+const HOLD_MAX = 5, HOLD_Z = 38, THROW_UNIT = { speed: 380, vz: 240, selfDmg: 15, hitDmg: 25 };
 // Kendaraan rakitan 8 peti. r < T/2 supaya muat lewat celah 1 petak; turn = rad/detik; ram = damage tabrak
 const VEHICLES = {
   tank: { hp: 650, speed: 100, r: 19, weapon: 'cannon', turn: 2.6, mass: 6, ram: 20, label: 'Tank' },
@@ -164,6 +166,7 @@ class Game {
     this.time = 0;
     this.events = [];
     this.cpu = true; // tim tanpa pemain diisi 1 komandan CPU
+    this.ff = false; // friendly fire: serangan tim saling melukai + angkat/lempar pemain
     this.master = 0; // id pemain room master (memilih peta, CPU, bisa mengeluarkan pemain)
     this.setMap(0);
     this.toLobby();
@@ -356,7 +359,7 @@ class Game {
       if (m.t === 'ready') p.ready = !!m.v;
       else if (m.t === 'team' && Number.isInteger(m.team) && m.team >= 0 && m.team < this.teams && m.team !== p.team) {
         p.team = m.team; p.ready = false;
-      } else if ((m.t === 'map' || m.t === 'cpu') && !this.isMaster(p, m.t === 'map' ? 'memilih peta' : 'mengatur CPU')) {
+      } else if ((m.t === 'map' || m.t === 'cpu' || m.t === 'ff') && !this.isMaster(p, m.t === 'map' ? 'memilih peta' : m.t === 'ff' ? 'mengatur friendly fire' : 'mengatur CPU')) {
         // ditolak: bukan room master
       } else if (m.t === 'map' && Number.isInteger(m.i) && m.i >= 0 && m.i < MAPS.length && m.i !== this.mapIdx) {
         // ganti peta: bangun ulang dunia & kirim ulang data peta ke semua client
@@ -369,6 +372,10 @@ class Game {
         this.cpu = !!m.v;
         for (const q of this.players.values()) q.ready = false; // aturan berubah → konfirmasi ulang
         this.events.push({ k: 'cpu', n: p.name, v: this.cpu });
+      } else if (m.t === 'ff' && !!m.v !== this.ff) {
+        this.ff = !!m.v;
+        for (const q of this.players.values()) q.ready = false;
+        this.events.push({ k: 'ff', n: p.name, v: this.ff });
       }
     }
   }
@@ -463,6 +470,8 @@ class Game {
       }
       u.carry = 0;
     }
+    if (u.holding) this.releaseHeld(this.units.get(u.holding));
+    if (u.heldBy) { const h = this.units.get(u.heldBy); if (h) h.holding = 0; u.heldBy = 0; }
     this.units.delete(u.id);
   }
   // wide = di mana saja di peta (kiriman peti), bukan hanya zona tengah
@@ -507,11 +516,12 @@ class Game {
       return;
     }
     if (k === 'grab') this.grab(u, col);
-    else if (k === 'throw') this.throwCrate(u);
+    else if (k === 'throw') u.holding ? this.throwUnit(u) : this.throwCrate(u);
     else if (k === 'build') this.build(u);
   }
   grab(u, col = -1) {
     if (u.lord || u.abducted) return;
+    if (u.holding) { this.releaseHeld(this.units.get(u.holding)); return; } // E saat mengangkat teman = turunkan
     const b = this.bases[u.team];
     if (u.carry) {
       const c = this.crates.get(u.carry);
@@ -565,9 +575,80 @@ class Game {
         if (best) { if (t !== u.team) this.events.push({ k: 'steal', t, by: u.team }); break; }
       }
     }
-    if (!best) return;
+    if (!best) { this.grabUnit(u); return; } // terakhir: angkat pemain terdekat (hanya friendly fire)
     best.state = 'carried'; best.by = u.id; best.thrown = false;
     u.carry = best.id;
+  }
+  // ---------------- angkat & lempar pemain (friendly fire) ----------------
+  // Korban memakai abducted < 0 (-id pengangkat): dilewati AI, gerak, tabrakan, lubang, peluru & damage seperti korban UFO.
+  grabUnit(u) {
+    if (!this.ff || u.kind !== 'human' || u.carry || u.holding) return;
+    let v = null, bd = Infinity;
+    for (const o of this.units.values()) {
+      if (o.id === u.id || !isInf(o) || o.lord || o.abducted || o.shield > 0) continue;
+      const d = dist(u, o) - o.r - u.r;
+      if (d < 8 && d < bd) { bd = d; v = o; }
+    }
+    if (!v) return;
+    if (v.carry) { // peti yang dibawa korban jatuh
+      const c = this.crates.get(v.carry);
+      if (c) { c.state = 'ground'; c.z = 0; c.x = v.x; c.y = v.y; }
+      v.carry = 0;
+    }
+    u.holding = v.id; v.heldBy = u.id; v.abducted = -u.id; v.holdT = HOLD_MAX;
+    v.in = { mx: 0, my: 0, a: v.a, fire: false }; v.moving = false;
+    this.events.push({ k: 'board', x: r1(v.x), y: r1(v.y) });
+    this.tip(v, this.unitName(u) + ' mengangkatmu!');
+  }
+  // Lepas korban dengan lembut di depan pengangkat (jatuh ke lubang = tewas, kredit ke pengangkat)
+  releaseHeld(v) {
+    if (!v) return;
+    const h = this.units.get(v.heldBy);
+    v.abducted = 0; v.heldBy = 0; v.lift = 0; v.holdT = 0;
+    if (!h) return;
+    if (h.holding === v.id) h.holding = 0;
+    v.x = h.x + Math.cos(h.a) * 22; v.y = h.y + Math.sin(h.a) * 22;
+    for (const s of this.solids) pushOut(v, v.r, s);
+    v.x = clamp(v.x, T, W - T); v.y = clamp(v.y, T, H - T);
+    if (this.inPit(v.x, v.y, 6)) { this.events.push({ k: 'fall', x: r1(v.x), y: r1(v.y) }); this.kill(v, h.id, true); }
+  }
+  throwUnit(u) {
+    const v = this.units.get(u.holding);
+    if (!v) { u.holding = 0; return; }
+    u.holding = 0; v.heldBy = 0; // abducted tetap < 0 selama terbang
+    v.flight = { vx: Math.cos(u.a) * THROW_UNIT.speed, vy: Math.sin(u.a) * THROW_UNIT.speed, vz: THROW_UNIT.vz, by: u.id, hit: false };
+    v.lift = CARRY_Z; v.holdT = 0;
+    v.x = u.x + Math.cos(u.a) * 14; v.y = u.y + Math.sin(u.a) * 14;
+  }
+  // Korban yang diangkat mengikuti pengangkat; korban yang dilempar terbang lalu mendarat
+  tickHeld(dt) {
+    for (const v of [...this.units.values()]) {
+      if (!this.units.has(v.id)) continue;
+      if (v.heldBy) {
+        const h = this.units.get(v.heldBy);
+        if (!h || h.holding !== v.id || h.lord || h.abducted > 0 || (v.holdT -= dt) <= 0) { this.releaseHeld(v); continue; }
+        v.x = h.x + Math.cos(h.a) * 14; v.y = h.y + Math.sin(h.a) * 14; v.lift = HOLD_Z;
+      } else if (v.flight) {
+        const f = v.flight;
+        f.vz -= 900 * dt; v.lift += f.vz * dt;
+        this.eventMove(v, f.vx * dt, f.vy * dt, v.r);
+        if (!f.hit && v.lift < 40) {
+          for (const o of this.units.values()) {
+            if (o.id === v.id || o.team < 0 || o.fly || o.neutral || o.abducted || Math.hypot(o.x - v.x, o.y - v.y) >= o.r + v.r) continue;
+            f.hit = true; f.vx *= -0.25; f.vy *= -0.25;
+            this.events.push({ k: 'bonk', x: r1(o.x), y: r1(o.y) });
+            this.damage(o, THROW_UNIT.hitDmg, f.by);
+            break;
+          }
+        }
+        if (v.lift > 0) continue;
+        v.lift = 0; v.flight = null; v.abducted = 0;
+        v.x = clamp(v.x, T, W - T); v.y = clamp(v.y, T, H - T);
+        if (this.inPit(v.x, v.y, 6)) { this.events.push({ k: 'fall', x: r1(v.x), y: r1(v.y) }); this.kill(v, f.by, true); continue; }
+        this.events.push({ k: 'land', x: r1(v.x), y: r1(v.y) });
+        this.damage(v, THROW_UNIT.selfDmg, f.by);
+      }
+    }
   }
   // Unit pemain disimpan di kendaraan (keluar dari daftar unit); input pemain diarahkan ke kendaraan
   board(u, v) {
@@ -689,6 +770,8 @@ class Game {
     }
     if (u.ammo !== Infinity && --u.ammo <= 0) { u.weapon = 'pistol'; u.ammo = Infinity; }
   }
+  // Friendly fire: true bila serangan tim `team` dari `ownerId` boleh melukai unit `u` yang satu tim (bukan pemiliknya sendiri)
+  friendly(team, ownerId, u) { return this.ff && team >= 0 && ownerId !== u.id; }
   damage(u, dmg, attackerId) {
     if (!this.units.has(u.id) || u.shield > 0 || u.neutral || u.abducted) return;
     if (attackerId) { u.lastHit = attackerId; u.lastHitT = this.time; } // untuk kredit bila nanti jatuh ke lubang
@@ -719,7 +802,8 @@ class Game {
       const p = this.players.get(u.owner);
       if (p) { p.deaths++; p.unitId = 0; p.respawn = RESPAWN; }
     }
-    if (killer && killer.owner) { const p = this.players.get(killer.owner); if (p) p.kills++; } // termasuk pemain di kendaraan
+    // termasuk pemain di kendaraan; teamkill (friendly fire) tidak menambah skor
+    if (killer && killer.owner && !(killer.team === u.team && killer !== u)) { const p = this.players.get(killer.owner); if (p) p.kills++; }
   }
   damageHQ(t, dmg) {
     if (!this.alive[t] || this.state !== 'playing') return;
@@ -847,7 +931,7 @@ class Game {
   explode(x, y, r, dmg, team, attackerId) {
     this.events.push({ k: 'boom', x: r1(x), y: r1(y), r });
     for (const u of [...this.units.values()]) {
-      if (u.team === team) continue;
+      if (u.team === team && !this.friendly(team, attackerId, u)) continue;
       const d = Math.hypot(u.x - x, u.y - y);
       if (d < r + u.r) this.damage(u, dmg * (1 - (d / (r + u.r)) * 0.5), attackerId);
     }
@@ -1105,7 +1189,7 @@ class Game {
         const l = Math.hypot(mx, my);
         if (l > 1) { mx /= l; my /= l; }
         const veh = VEHICLES[u.kind];
-        let sp = veh ? veh.speed : u.kind === 'monster' ? MONSTER.speed * u.spd : u.lordBoss ? 110 : u.lord ? 185 : u.kind === 'chicken' ? 210 : u.carry ? 112 : 165;
+        let sp = veh ? veh.speed : u.kind === 'monster' ? MONSTER.speed * u.spd : u.lordBoss ? 110 : u.lord ? 185 : u.kind === 'chicken' ? 210 : u.carry || u.holding ? 112 : 165;
         if (u.kind !== 'monster' && this.heightAt(u.x, u.y) > 8) sp *= 0.78; // mendaki bukit lebih lambat
         u.moving = l > 0.1 && sp > 0;
         if (veh && u.moving) {
@@ -1121,7 +1205,7 @@ class Game {
       u.a = u.in.a;
       u.cd -= dt;
       if (u.shield > 0) u.shield -= dt;
-      if (u.in.fire && !u.carry && u.cd <= 0) this.fire(u);
+      if (u.in.fire && !u.carry && !u.holding && u.cd <= 0) this.fire(u);
       if (isInf(u) && !u.lord && u.weapon === 'pistol') {
         for (const pk of this.pickups.values()) {
           if (Math.hypot(pk.x - u.x, pk.y - u.y) < 26) { u.weapon = pk.w; u.ammo = pk.ammo; this.pickups.delete(pk.id); this.encounters.notifyMbgPickup(u, pk); break; }
@@ -1140,7 +1224,7 @@ class Game {
       const fa = ma === Infinity ? 0 : mb === Infinity ? 1 : mb / (ma + mb), o = R - d, nx = dx / d, ny = dy / d;
       a.x -= nx * o * fa; a.y -= ny * o * fa;
       b.x += nx * o * (1 - fa); b.y += ny * o * (1 - fa);
-      if (a.team !== b.team) { this.ram(a, b); this.ram(b, a); }
+      if (a.team !== b.team || (this.ff && a.team >= 0)) { this.ram(a, b); this.ram(b, a); }
     }
     for (const u of list) {
       for (const s of this.solids) pushOut(u, u.r, s);
@@ -1153,6 +1237,8 @@ class Game {
         this.kill(u, this.time - (u.lastHitT || -9) < 4 ? u.lastHit : 0, true);
       }
     }
+
+    this.tickHeld(dt);
 
     // fisika peti
     for (const c of this.crates.values()) {
@@ -1168,7 +1254,7 @@ class Game {
         }
         if (!c.hit && c.z < 50) {
           for (const u of this.units.values()) {
-            if (u.fly || u.abducted || u.neutral || (c.thrown && u.team === c.team)) continue;
+            if (u.fly || u.abducted || u.neutral || (c.thrown && u.team === c.team && !this.friendly(c.team, c.by, u))) continue;
             if (Math.hypot(u.x - c.x, u.y - c.y) < u.r + 14) {
               c.hit = true; c.vx *= -0.25; c.vy *= -0.25;
               this.events.push({ k: 'bonk', x: r1(u.x), y: r1(u.y) });
@@ -1201,7 +1287,7 @@ class Game {
           break;
         }
         if (!dead) for (const u of this.units.values()) {
-          if (u.team === bl.team || (bl.hits && bl.hits.has(u.id))) continue;
+          if (u.abducted < 0 || (u.team === bl.team && !this.friendly(bl.team, bl.owner, u)) || (bl.hits && bl.hits.has(u.id))) continue;
           if (Math.hypot(u.x - bl.x, u.y - bl.y) < u.r + 3) {
             if (bl.hits) { // laser menembus: tiap unit hanya kena sekali
               bl.hits.add(u.id);
@@ -1232,7 +1318,7 @@ class Game {
 
   snapshot() {
     const U = [], C = [], B = [], P = [], PL = [];
-    for (const u of this.units.values()) U.push([u.id, u.team, r1(u.x), r1(u.y), +u.a.toFixed(2), Math.ceil(u.hp), u.max, WLIST.indexOf(u.weapon), u.carry ? 1 : 0, KIND[u.kind], u.owner, u.moving ? 1 : 0, u.ammo === Infinity ? -1 : u.ammo, u.shield > 0 ? 1 : 0, +u.hull.toFixed(2), u.anim, u.rage > 0 ? 1 : 0, u.elite ? 1 : 0, u.lord ? 1 : 0, Math.round(u.lift || 0), u.neutral ? 1 : 0]);
+    for (const u of this.units.values()) U.push([u.id, u.team, r1(u.x), r1(u.y), +u.a.toFixed(2), Math.ceil(u.hp), u.max, WLIST.indexOf(u.weapon), u.carry ? 1 : 0, KIND[u.kind], u.owner, u.moving ? 1 : 0, u.ammo === Infinity ? -1 : u.ammo, u.shield > 0 ? 1 : 0, +u.hull.toFixed(2), u.anim, u.rage > 0 ? 1 : 0, u.elite ? 1 : 0, u.lord ? 1 : 0, Math.round(u.lift || 0), u.neutral ? 1 : 0, u.heldBy ? 1 : u.flight ? 2 : 0, u.holding ? 1 : 0]);
     for (const c of this.crates.values()) C.push([c.id, r1(c.x), r1(c.y), r1(c.z), c.state === 'pad' ? 1 : 0, c.metal ? 1 : 0, c.state === 'washed' ? 1 : 0]);
     // jenis peluru: 0 biasa, 1 roket, 2 batu monster, 3 api, 4 granat, 5 laser
     for (const b of this.bullets) B.push([b.id, r1(b.x), r1(b.y), b.rock ? 2 : b.fx || (b.rocket ? 1 : 0), b.team]);
@@ -1243,7 +1329,7 @@ class Game {
       hq: this.hq.map(Math.ceil), al: this.alive, pad: this.pads.map((_, t) => this.padCount(t)), U, C, B, P, PL, ev: this.events,
       pm: this.pads.map((_, t) => this.padMask(t)), pr: this.pads.map((_, t) => this.planLabel(t)), ms: this.master,
       or: this.orders.map((o, t) => [o.build, o.mode, o.target, this.buildWant(t)]),
-      lb: [this.cpu ? 1 : 0, Math.ceil(this.countdown), this.activeTeams()],
+      lb: [this.cpu ? 1 : 0, Math.ceil(this.countdown), this.activeTeams(), this.ff ? 1 : 0],
       A: this.arenaEvents.snapshot(), D: this.encounters.snapshot(),
       M: this.meteors.map(m => [m.id, r1(m.x), r1(m.y), +m.t.toFixed(2), m.r]),
     });
