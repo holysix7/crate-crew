@@ -5,14 +5,21 @@ const T = 40, MW = 48, MH = 36, W = MW * T, H = MH * T;
 const TICK = 1 / 30;
 const TEAM_NAMES = ['Merah', 'Biru', 'Hijau', 'Kuning'];
 const TEAM_COLORS = ['#e5484d', '#3e7bfa', '#30a46c', '#f5b400'];
+// fx = jenis tampilan peluru di client (3 api, 4 granat, 5 laser); pierce = menembus unit
 const WEAPONS = {
-  pistol:  { rate: 0.28, dmg: 12, speed: 720, spread: 0.05, pellets: 1, ammo: Infinity, life: 0.65 },
-  smg:     { rate: 0.09, dmg: 7,  speed: 760, spread: 0.13, pellets: 1, ammo: 70, life: 0.6 },
-  shotgun: { rate: 0.85, dmg: 9,  speed: 680, spread: 0.28, pellets: 6, ammo: 14, life: 0.38 },
-  bazooka: { rate: 1.2,  dmg: 75, speed: 430, spread: 0,    pellets: 1, ammo: 5,  life: 1.4, rocket: true, splash: 75 },
+  pistol:  { label: 'Pistol', rate: 0.28, dmg: 12, speed: 720, spread: 0.05, pellets: 1, ammo: Infinity, life: 0.65 },
+  smg:     { label: 'SMG', rate: 0.09, dmg: 7,  speed: 760, spread: 0.13, pellets: 1, ammo: 70, life: 0.6 },
+  shotgun: { label: 'Shotgun', rate: 0.85, dmg: 9,  speed: 680, spread: 0.28, pellets: 6, ammo: 14, life: 0.38 },
+  bazooka: { label: 'Bazooka', rate: 1.2,  dmg: 75, speed: 430, spread: 0,    pellets: 1, ammo: 5,  life: 1.4, rocket: true, splash: 75 },
   // senjata bawaan kendaraan
-  cannon:  { rate: 1.6,  dmg: 70, speed: 520, spread: 0,    pellets: 1, ammo: Infinity, life: 1.1, rocket: true, splash: 70 },
-  mg:      { rate: 0.1,  dmg: 6,  speed: 800, spread: 0.07, pellets: 1, ammo: Infinity, life: 0.55 },
+  cannon:  { label: 'Meriam', rate: 1.6,  dmg: 70, speed: 520, spread: 0,    pellets: 1, ammo: Infinity, life: 1.1, rocket: true, splash: 70 },
+  mg:      { label: 'Senapan mesin', rate: 0.1,  dmg: 6,  speed: 800, spread: 0.07, pellets: 1, ammo: Infinity, life: 0.55 },
+  // senjata dari resep pola susunan
+  sniper:  { label: 'Sniper', rate: 1.1,  dmg: 60, speed: 1400, spread: 0,   pellets: 1, ammo: 8,   life: 0.55 },
+  flamer:  { label: 'Pelontar api', rate: 0.05, dmg: 3, speed: 340, spread: 0.22, pellets: 1, ammo: 120, life: 0.45, fx: 3 },
+  grenade: { label: 'Pelontar granat', rate: 0.9, dmg: 55, speed: 380, spread: 0.04, pellets: 1, ammo: 8, life: 0.9, rocket: true, splash: 70, fx: 4 },
+  minigun: { label: 'Minigun', rate: 0.05, dmg: 5,  speed: 820, spread: 0.16, pellets: 1, ammo: 200, life: 0.55 },
+  laser:   { label: 'Laser', rate: 0.45, dmg: 30, speed: 1600, spread: 0,   pellets: 1, ammo: 12,  life: 0.4, pierce: true, fx: 5 },
 };
 const WLIST = Object.keys(WEAPONS);
 const KIND = { human: 0, bot: 1, turret: 2, tank: 3, jeep: 4, monster: 5 };
@@ -49,6 +56,37 @@ const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 // Perintah tim. build: apa yang dirakit di pad (bot & tombol Q). mode: tugas bot non-pengumpul.
 const BUILD_PLANS = { auto: 0, weapon: 1, buddy: 4, turret: 8, tank: 8, jeep: 8 };
 const MODES = ['follow', 'defend', 'attack'];
+const BUILD_LABEL = { buddy: 'Buddy', elite: 'Buddy Elit', turret: 'Turret', tank: 'Tank', jeep: 'Jeep' };
+
+// Resep pola susunan pad 2×2. Bit petak: 0 kiri-atas, 1 kanan-atas, 2 kiri-bawah, 3 kanan-bawah (arah layar);
+// lo = tingkat 1, hi = tingkat 2 (hanya bisa di atas peti tingkat 1). Daftar ini juga dikirim ke client untuk buku resep.
+const RECIPES = [
+  { id: 'weapon', name: 'Senjata acak', desc: '1 peti · SMG / Shotgun / Bazooka', lo: 0b0001, hi: 0 },
+  { id: 'sniper', name: 'Sniper', desc: '2 peti berjajar kiri–kanan · jarak jauh', lo: 0b0011, hi: 0 },
+  { id: 'flamer', name: 'Pelontar api', desc: '2 peti atas–bawah · jarak dekat, deras', lo: 0b0101, hi: 0 },
+  { id: 'grenade', name: 'Pelontar granat', desc: '2 peti diagonal · ledakan area', lo: 0b1001, hi: 0 },
+  { id: 'laser', name: 'Laser', desc: '1 peti ditumpuk 1 (menara) · menembus musuh', lo: 0b0001, hi: 0b0001 },
+  { id: 'minigun', name: 'Minigun', desc: '3 peti bentuk L · 200 peluru', lo: 0b0111, hi: 0 },
+  { id: 'buddy', name: 'Buddy', desc: '4 peti rata · rekrut bot', lo: 0b1111, hi: 0 },
+  { id: 'elite', name: 'Buddy Elit', desc: '4 rata + 1 di atas · HP 160, senjata khusus', lo: 0b1111, hi: 0b0001 },
+  { id: 'big', name: 'Turret / Tank / Jeep', desc: '8 peti, 2 tingkat penuh', lo: 0b1111, hi: 0b1111 },
+];
+const RECIPE_WEAPON = { sniper: 'sniper', flamer: 'flamer', grenade: 'grenade', laser: 'laser', minigun: 'minigun' };
+const ELITE_WEAPONS = ['sniper', 'grenade', 'minigun', 'laser', 'flamer'];
+const ELITE_HP = 160;
+const bits = m => { let n = 0; for (; m; m &= m - 1) n++; return n; };
+function matchRecipe(mask) {
+  const lo = mask & 15, hi = mask >> 4, nl = bits(lo), nh = bits(hi);
+  if (!nh) return [null, 'weapon', lo === 0b0011 || lo === 0b1100 ? 'sniper' : lo === 0b0101 || lo === 0b1010 ? 'flamer' : 'grenade', 'minigun', 'buddy'][nl];
+  if (nl === 1 && hi === lo) return 'laser';
+  if (nl === 4 && nh === 1) return 'elite';
+  if (nl === 4 && nh === 4) return 'big';
+  return null;
+}
+// urutan petak dari yang paling dekat ke petak `col` (dipakai server & client supaya ramalan petak sama)
+const cellOrder = col => [0, 1, 2, 3].sort((i, j) =>
+  Math.abs((i & 1) - (col & 1)) + Math.abs((i >> 1) - (col >> 1)) - Math.abs((j & 1) - (col & 1)) - Math.abs((j >> 1) - (col >> 1)) || i - j);
+const cleanName = s => String(s || '').replace(/[^\p{L}\p{N} _\-.]/gu, '').trim().slice(0, 14);
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -119,6 +157,7 @@ class Game {
     this.time = 0;
     this.events = [];
     this.cpu = true; // tim tanpa pemain diisi 1 komandan CPU
+    this.master = 0; // id pemain room master (memilih peta, CPU, bisa mengeluarkan pemain)
     this.setMap(0);
     this.toLobby();
   }
@@ -145,6 +184,7 @@ class Game {
     return JSON.stringify({
       t: 'welcome', teams: this.teams, colors: TEAM_COLORS.slice(0, this.teams), names: TEAM_NAMES.slice(0, this.teams), weapons: WLIST,
       map: this.mapInfo(), maps: MAPS.map(m => ({ id: m.id, name: m.name })), hqMax: HQ_HP,
+      wlabels: WLIST.map(k => WEAPONS[k].label), recipes: RECIPES.map(({ id, name, desc, lo, hi }) => ({ id, name, desc, lo, hi })),
     });
   }
   // margin > 0 = toleransi di tepi (masih aman), margin < 0 = lubang dianggap lebih besar
@@ -217,12 +257,60 @@ class Game {
     if (u && VEHICLES[u.kind]) { u.driver = null; u.owner = 0; } // kendaraan tetap ada, kembali dikemudikan AI
     else if (u) this.removeUnit(u);
     this.players.delete(p.id);
-    this.events.push({ k: 'leave', n: p.name });
+    if (!p.kicked) this.events.push({ k: 'leave', n: p.name });
+    if (this.master === p.id) {
+      // room master keluar → diwariskan ke pemain yang paling lama di ruangan
+      const nx = this.players.values().next().value;
+      this.master = nx ? nx.id : 0;
+      if (nx) this.events.push({ k: 'master', n: nx.name });
+    }
+  }
+  sys(p, s) { p.conn.send(JSON.stringify({ t: 'chat', sys: 1, s })); }
+  isMaster(p, what) {
+    if (p.id === this.master) return true;
+    this.sys(p, 'Hanya room master yang bisa ' + what + '.');
+    return false;
+  }
+  kick(p, target) {
+    if (!target || target === p || !this.isMaster(p, 'mengeluarkan pemain')) return;
+    target.kicked = true;
+    target.conn.send(JSON.stringify({ t: 'kicked', by: p.name }));
+    this.events.push({ k: 'kick', n: target.name, by: p.name });
+    target.conn.close();
+  }
+  giveMaster(p, target) {
+    if (!target || target === p || !this.isMaster(p, 'memindahkan room master')) return;
+    this.master = target.id;
+    this.events.push({ k: 'master', n: target.name });
+  }
+  findPlayer(name) {
+    const q = name.trim().toLowerCase(), ps = [...this.players.values()];
+    return ps.find(p => p.name.toLowerCase() === q) || ps.find(p => p.name.toLowerCase().startsWith(q)) || null;
+  }
+  // chat ala Dota: semua / tim, plus perintah "/kick nama", "/master nama"
+  chat(p, m) {
+    const s = String(m.s || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120);
+    if (!s) return;
+    if (s[0] === '/') {
+      const [cmd, ...rest] = s.slice(1).split(' '), arg = rest.join(' ');
+      if (cmd === 'kick' || cmd === 'master') {
+        const target = arg && this.findPlayer(arg);
+        if (!target) return this.sys(p, 'Pemain "' + arg + '" tidak ditemukan.');
+        return cmd === 'kick' ? this.kick(p, target) : this.giveMaster(p, target);
+      }
+      return this.sys(p, 'Perintah: /kick nama · /master nama (khusus room master)');
+    }
+    const now = Date.now();
+    p.chatT = (p.chatT || []).filter(t => now - t < 5000);
+    if (p.chatT.length >= 5) return this.sys(p, 'Terlalu cepat, tunggu sebentar.');
+    p.chatT.push(now);
+    const team = !!m.team, msg = JSON.stringify({ t: 'chat', id: p.id, n: p.name, tm: p.team, team, s });
+    for (const q of this.players.values()) if (!team || q.team === p.team) q.conn.send(msg);
   }
   onMsg(c, m) {
     if (!m || typeof m !== 'object') return;
     if (m.t === 'join' && !c.player) {
-      const name = String(m.name || '').replace(/[^\p{L}\p{N} _\-.]/gu, '').trim().slice(0, 14) || 'Buddy' + (this.nextId % 100);
+      const name = cleanName(m.name) || 'Buddy' + (this.nextId % 100);
       let team = Number.isInteger(m.team) && m.team >= 0 && m.team < this.teams ? m.team : -1;
       if (team < 0) {
         const counts = this.bases.map((b, t) => [...this.players.values()].filter(p => p.team === t).length + (this.alive[t] ? 0 : 100));
@@ -231,6 +319,7 @@ class Game {
       const p = { id: this.id(), name, team, unitId: 0, respawn: 0.3, kills: 0, deaths: 0, ready: false, input: { mx: 0, my: 0, a: 0, fire: false }, acts: [], conn: c };
       this.players.set(p.id, p);
       c.player = p;
+      if (!this.master) this.master = p.id; // pemain pertama jadi room master
       c.send(JSON.stringify({ t: 'joined', id: p.id, team }));
       this.events.push({ k: 'join', n: name, t: team });
       return;
@@ -240,14 +329,23 @@ class Game {
     if (m.t === 'in') {
       p.input = { mx: clamp(+m.mx || 0, -1, 1), my: clamp(+m.my || 0, -1, 1), a: Number.isFinite(+m.a) ? +m.a : 0, fire: !!m.f };
     } else if (m.t === 'act' && ['grab', 'throw', 'build'].includes(m.k) && p.acts.length < 4) {
-      p.acts.push(m.k);
+      // c = petak pad yang dibidik saat menaruh peti (0–3), -1 = pilih otomatis dari arah hadap
+      p.acts.push({ k: m.k, c: Number.isInteger(m.c) && m.c >= 0 && m.c < 4 ? m.c : -1 });
     } else if (m.t === 'order') {
       this.setOrder(p, m);
+    } else if (m.t === 'chat') {
+      this.chat(p, m);
+    } else if (m.t === 'kick') {
+      this.kick(p, this.players.get(m.id));
+    } else if (m.t === 'master') {
+      this.giveMaster(p, this.players.get(m.id));
     } else if (this.state === 'lobby' || this.state === 'countdown') {
       // aksi ruang tunggu
       if (m.t === 'ready') p.ready = !!m.v;
       else if (m.t === 'team' && Number.isInteger(m.team) && m.team >= 0 && m.team < this.teams && m.team !== p.team) {
         p.team = m.team; p.ready = false;
+      } else if ((m.t === 'map' || m.t === 'cpu') && !this.isMaster(p, m.t === 'map' ? 'memilih peta' : 'mengatur CPU')) {
+        // ditolak: bukan room master
       } else if (m.t === 'map' && Number.isInteger(m.i) && m.i >= 0 && m.i < MAPS.length && m.i !== this.mapIdx) {
         // ganti peta: bangun ulang dunia & kirim ulang data peta ke semua client
         this.setMap(m.i);
@@ -361,31 +459,44 @@ class Game {
     }
   }
   padCount(t) { let n = 0; for (const id of this.pads[t]) if (id) n++; return n; }
+  padMask(t) { return this.pads[t].reduce((m, id, i) => (id ? m | (1 << i) : m), 0); }
+  // petak untuk peti yang ditaruh pemain: kolom yang dibidik dulu, lalu kolom terdekat; tingkat 2 hanya di atas peti
+  pickSlot(u, col) {
+    const pad = this.pads[u.team];
+    if (col < 0) {
+      const fx = u.x + Math.cos(u.a) * 30, fy = u.y + Math.sin(u.a) * 30;
+      let bd = Infinity;
+      for (let k = 0; k < 4; k++) { const s = this.slotPos(u.team, k), d = Math.hypot(s.x - fx, s.y - fy); if (d < bd) { bd = d; col = k; } }
+    }
+    for (const k of cellOrder(col)) { if (!pad[k]) return k; if (!pad[k + 4]) return k + 4; }
+    return -1;
+  }
   slotPos(t, i) {
     const b = this.bases[t], k = i % 4;
     return { x: b.pad.x + (k % 2 ? T / 2 : -T / 2), y: b.pad.y + (k < 2 ? -T / 2 : T / 2), z: i >= 4 ? CRATE_H : 0 };
   }
 
   // ---------------- aksi pemain ----------------
-  action(u, k) {
+  action(u, k, col = -1) {
     if (u.kind === 'turret' || !this.units.has(u.id)) return;
     if (VEHICLES[u.kind]) { // pengemudi: E keluar, Q tetap bisa merakit (kecuali senjata)
       if (k === 'grab') this.exitVehicle(u);
       else if (k === 'build') this.build(u);
       return;
     }
-    if (k === 'grab') this.grab(u);
+    if (k === 'grab') this.grab(u, col);
     else if (k === 'throw') this.throwCrate(u);
     else if (k === 'build') this.build(u);
   }
-  grab(u) {
+  grab(u, col = -1) {
     const b = this.bases[u.team];
     if (u.carry) {
       const c = this.crates.get(u.carry);
       u.carry = 0;
       if (!c) return;
       const pad = this.pads[u.team];
-      const slot = pad.indexOf(0);
+      // pemain memilih petak (pola resep); bot cukup mengisi petak kosong pertama (berjajar → L → rata)
+      const slot = u.kind === 'human' ? this.pickSlot(u, col) : pad.indexOf(0);
       if (dist(u, b.pad) < 72 && slot >= 0) {
         const sp = this.slotPos(u.team, slot);
         pad[slot] = c.id; c.state = 'pad'; c.team = u.team; c.x = sp.x; c.y = sp.y; c.z = sp.z;
@@ -458,23 +569,42 @@ class Game {
     if (!c) return;
     Object.assign(c, { state: 'air', thrown: true, team: u.team, by: u.id, hit: false, x: u.x, y: u.y, z: CARRY_Z, vx: Math.cos(u.a) * 430, vy: Math.sin(u.a) * 430, vz: 240 });
   }
+  // Apa yang dirakit dari isi pad tim t sekarang (null = belum bisa). Dipakai tombol Q, bot, dan label HUD.
+  // what: 'weapon' (w = senjata resep, kosong = acak), 'buddy', 'elite', 'turret'/'tank'/'jeep', atau array = pilih acak.
+  plan(t) {
+    const n = this.padCount(t);
+    if (!n) return null;
+    const order = this.orders[t].build, want = this.buildWant(t), pat = matchRecipe(this.padMask(t));
+    if (want && n < want) return null; // tunggu sampai peti cukup untuk rakitan yang diperintahkan
+    if (want === 8) return { what: order, take: 8 };
+    if (want === 4) return pat === 'elite' ? { what: 'elite', take: 5 } : { what: 'buddy', take: 4 };
+    if (RECIPE_WEAPON[pat]) return { what: 'weapon', w: RECIPE_WEAPON[pat], take: n }; // pola senjata (otomatis / perintah senjata)
+    if (want === 1) return { what: 'weapon', take: 1 };
+    // otomatis: 8 peti jadi turret / tank / jeep acak (yang belum penuh)
+    const big = ['turret', 'tank', 'jeep'].filter(k => this.canBuild(t, k));
+    if (n >= 8 && big.length) return { what: big, take: 8 };
+    const buddy = this.canBuild(t, 'buddy');
+    if (pat === 'elite' && buddy) return { what: 'elite', take: 5 };
+    if (n >= 4 && buddy) return { what: 'buddy', take: 4 };
+    return { what: 'weapon', take: 1 };
+  }
+  planLabel(t) {
+    const p = this.plan(t);
+    if (!p) return '';
+    if (Array.isArray(p.what)) return p.what.map(k => BUILD_LABEL[k]).join('/');
+    return p.what === 'weapon' ? (p.w ? WEAPONS[p.w].label : 'Senjata acak') : BUILD_LABEL[p.what];
+  }
   build(u) {
     const b = this.bases[u.team];
     if (dist(u, b.pad) > 84) return;
     const pad = this.pads[u.team];
-    const n = this.padCount(u.team);
-    if (!n) return;
-    const take = k => { for (let i = 7; i >= 0 && k > 0; i--) if (pad[i]) { this.crates.delete(pad[i]); pad[i] = 0; k--; } };
-    const want = this.buildWant(u.team);
-    if (want && n < want) return; // tunggu sampai peti cukup untuk rakitan yang diperintahkan
-    let what;
-    if (want) what = this.orders[u.team].build;
-    else if (n >= 8 && ['turret', 'tank', 'jeep'].some(k => this.canBuild(u.team, k))) {
-      // otomatis: 8 peti jadi turret / tank / jeep acak (yang belum penuh)
-      const opts = ['turret', 'tank', 'jeep'].filter(k => this.canBuild(u.team, k));
-      what = opts[(Math.random() * opts.length) | 0];
-    } else what = n >= 4 && this.canBuild(u.team, 'buddy') ? 'buddy' : 'weapon';
+    const p = this.plan(u.team);
+    if (!p) return;
+    let what = p.what;
+    if (Array.isArray(what)) what = what[(Math.random() * what.length) | 0];
     if (what === 'weapon' && !isInf(u)) return; // pengemudi tidak bisa memakai senjata tangan
+    // ambil peti dari atas dulu (pola resep memakai semua peti di pad)
+    const take = k => { for (let i = 7; i >= 0 && k > 0; i--) if (pad[i]) { this.crates.delete(pad[i]); pad[i] = 0; k--; } };
     if (what === 'turret') {
       take(8);
       const turrets = [...this.units.values()].filter(v => v.team === u.team && v.kind === 'turret').length;
@@ -485,16 +615,20 @@ class Game {
       take(8);
       const v = this.spawnUnit(u.team, what, b.pad.x + rand(-10, 10), b.pad.y + b.dy * T * 2);
       this.events.push({ k: 'build', t: u.team, w: VEHICLES[what].label + '!', x: r1(v.x), y: r1(v.y) });
-    } else if (what === 'buddy') {
-      take(4);
-      this.spawnBot(u.team, b.pad.x + rand(-20, 20), b.pad.y + b.dy * T * 1.6);
-      this.events.push({ k: 'build', t: u.team, w: 'Buddy baru!', x: r1(b.pad.x), y: r1(b.pad.y) });
+    } else if (what === 'buddy' || what === 'elite') {
+      take(p.take);
+      const bot = this.spawnBot(u.team, b.pad.x + rand(-20, 20), b.pad.y + b.dy * T * 1.6);
+      if (what === 'elite') {
+        const w = ELITE_WEAPONS[(Math.random() * ELITE_WEAPONS.length) | 0];
+        bot.elite = true; bot.hp = bot.max = ELITE_HP; bot.weapon = w; bot.ammo = WEAPONS[w].ammo * 2;
+      }
+      this.events.push({ k: 'build', t: u.team, w: what === 'elite' ? 'Buddy Elit!' : 'Buddy baru!', x: r1(b.pad.x), y: r1(b.pad.y) });
     } else {
-      take(1);
+      take(p.take);
       const roll = Math.random();
-      const w = roll < 0.45 ? 'smg' : roll < 0.8 ? 'shotgun' : 'bazooka';
+      const w = p.w || (roll < 0.45 ? 'smg' : roll < 0.8 ? 'shotgun' : 'bazooka');
       u.weapon = w; u.ammo = WEAPONS[w].ammo;
-      this.events.push({ k: 'build', t: u.team, w: w.toUpperCase() + '!', x: r1(b.pad.x), y: r1(b.pad.y) });
+      this.events.push({ k: 'build', t: u.team, w: WEAPONS[w].label.toUpperCase() + '!', x: r1(b.pad.x), y: r1(b.pad.y) });
     }
   }
 
@@ -517,7 +651,7 @@ class Game {
     for (let i = 0; i < w.pellets; i++) {
       const a = u.a + err + (Math.random() - 0.5) * 2 * w.spread;
       const sp = w.speed * (w.pellets > 1 ? rand(0.85, 1.1) : 1);
-      this.bullets.push({ id: this.id(), x: u.x + Math.cos(u.a) * (u.r + 4), y: u.y + Math.sin(u.a) * (u.r + 4), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, team: u.team, dmg: w.dmg, life: w.life * high, rocket: !!w.rocket, splash: w.splash || 0, owner: u.id });
+      this.bullets.push({ id: this.id(), x: u.x + Math.cos(u.a) * (u.r + 4), y: u.y + Math.sin(u.a) * (u.r + 4), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, team: u.team, dmg: w.dmg, life: w.life * high, rocket: !!w.rocket, splash: w.splash || 0, owner: u.id, fx: w.fx || 0, hits: w.pierce ? new Set() : null });
     }
     if (u.ammo !== Infinity && --u.ammo <= 0) { u.weapon = 'pistol'; u.ammo = Infinity; }
   }
@@ -865,7 +999,7 @@ class Game {
         }
       } else {
         u.in = p.input;
-        for (const k of p.acts) this.action(u, k);
+        for (const a of p.acts) this.action(u, a.k, a.c);
       }
       p.acts.length = 0;
     }
@@ -996,8 +1130,14 @@ class Game {
           break;
         }
         if (!dead) for (const u of this.units.values()) {
-          if (u.team === bl.team) continue;
+          if (u.team === bl.team || (bl.hits && bl.hits.has(u.id))) continue;
           if (Math.hypot(u.x - bl.x, u.y - bl.y) < u.r + 3) {
+            if (bl.hits) { // laser menembus: tiap unit hanya kena sekali
+              bl.hits.add(u.id);
+              this.damage(u, bl.dmg, bl.owner);
+              this.events.push({ k: 'hit', x: r1(bl.x), y: r1(bl.y) });
+              continue;
+            }
             dead = true;
             if (!bl.rocket) this.damage(u, bl.dmg, bl.owner);
             break;
@@ -1021,14 +1161,16 @@ class Game {
 
   snapshot() {
     const U = [], C = [], B = [], P = [], PL = [];
-    for (const u of this.units.values()) U.push([u.id, u.team, r1(u.x), r1(u.y), +u.a.toFixed(2), Math.ceil(u.hp), u.max, WLIST.indexOf(u.weapon), u.carry ? 1 : 0, KIND[u.kind], u.owner, u.moving ? 1 : 0, u.ammo === Infinity ? -1 : u.ammo, u.shield > 0 ? 1 : 0, +u.hull.toFixed(2), u.anim, u.rage > 0 ? 1 : 0]);
+    for (const u of this.units.values()) U.push([u.id, u.team, r1(u.x), r1(u.y), +u.a.toFixed(2), Math.ceil(u.hp), u.max, WLIST.indexOf(u.weapon), u.carry ? 1 : 0, KIND[u.kind], u.owner, u.moving ? 1 : 0, u.ammo === Infinity ? -1 : u.ammo, u.shield > 0 ? 1 : 0, +u.hull.toFixed(2), u.anim, u.rage > 0 ? 1 : 0, u.elite ? 1 : 0]);
     for (const c of this.crates.values()) C.push([c.id, r1(c.x), r1(c.y), r1(c.z), c.state === 'pad' ? 1 : 0]);
-    for (const b of this.bullets) B.push([b.id, r1(b.x), r1(b.y), b.rock ? 2 : b.rocket ? 1 : 0, b.team]);
+    // jenis peluru: 0 biasa, 1 roket, 2 batu monster, 3 api, 4 granat, 5 laser
+    for (const b of this.bullets) B.push([b.id, r1(b.x), r1(b.y), b.rock ? 2 : b.fx || (b.rocket ? 1 : 0), b.team]);
     for (const p of this.pickups.values()) P.push([p.id, r1(p.x), r1(p.y), WLIST.indexOf(p.w)]);
     for (const p of this.players.values()) PL.push([p.id, p.name, p.team, p.kills, p.deaths, p.unitId, p.unitId ? 0 : Math.ceil(p.respawn), p.ready ? 1 : 0]);
     return JSON.stringify({
       t: 's', tm: +this.time.toFixed(3), st: this.state, win: this.winner, et: Math.ceil(this.endTimer), rl: Math.ceil(this.roundLeft),
       hq: this.hq.map(Math.ceil), al: this.alive, pad: this.pads.map((_, t) => this.padCount(t)), U, C, B, P, PL, ev: this.events,
+      pm: this.pads.map((_, t) => this.padMask(t)), pr: this.pads.map((_, t) => this.planLabel(t)), ms: this.master,
       or: this.orders.map((o, t) => [o.build, o.mode, o.target, this.buildWant(t)]),
       lb: [this.cpu ? 1 : 0, Math.ceil(this.countdown), this.activeTeams()],
       M: this.meteors.map(m => [m.id, r1(m.x), r1(m.y), +m.t.toFixed(2), m.r]),
@@ -1041,4 +1183,4 @@ class Game {
   }
 }
 
-module.exports = { Game, WEAPONS, TEAM_NAMES, TEAM_COLORS };
+module.exports = { Game, WEAPONS, TEAM_NAMES, TEAM_COLORS, RECIPES, matchRecipe };

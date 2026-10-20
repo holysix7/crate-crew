@@ -82,6 +82,15 @@ class WSConn {
     this.s.write(Buffer.concat([h, payload]));
   }
   send(str) { this._frame(1, Buffer.from(str)); }
+  // tutup dari sisi server (mis. dikeluarkan room master): pesan terakhir tetap terkirim dulu
+  close() {
+    if (!this.open) return;
+    this._frame(8, Buffer.alloc(0));
+    this.open = false;
+    this.s.end();
+    setTimeout(() => this.s.destroy(), 1000);
+    if (this.onclose) this.onclose();
+  }
 }
 
 const game = new Game(TEAMS);

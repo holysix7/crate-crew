@@ -2,7 +2,9 @@
 <html lang="id">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Crate Crew</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -12,6 +14,42 @@
   <div id="orders" class="orders hidden">
     <b>Rakit di pad</b><div id="ob"></div>
     <b>Pasukan</b><div id="om"></div>
+  </div>
+
+  <!-- gamepad sentuh untuk HP: stik kiri gerak, stik kanan bidik + tembak -->
+  <div id="touch" class="touch hidden">
+    <div id="tzone" class="tzone"></div>
+    <div id="stick-l" class="stick left"><div class="knob"></div></div>
+    <div id="stick-r" class="stick right"><div class="knob"></div><span>TEMBAK</span></div>
+    <div class="tbtns">
+      <button data-act="build">Q<small>Rakit</small></button>
+      <button data-act="throw">F<small>Lempar</small></button>
+      <button data-act="grab" class="main">E<small>Angkat</small></button>
+    </div>
+    <div class="tmenu">
+      <button data-ui="orders">Perintah</button>
+      <button data-ui="book">Resep</button>
+      <button data-ui="score">Skor</button>
+      <button data-ui="chat">Chat</button>
+      <button data-ui="full">⛶</button>
+    </div>
+  </div>
+  <div id="rotate" class="rotate">Putar HP ke posisi <b>landscape</b> supaya lebih leluasa</div>
+
+  <div id="book" class="bookwin hidden">
+    <div class="bookcard">
+      <div class="bookhead"><b>Buku resep</b><button id="book-x" aria-label="Tutup">✕</button></div>
+      <div id="book-list" class="book"></div>
+      <p class="muted">Arahkan bidikan (mouse / stik kanan) ke petak pad saat menekan <kbd>E</kbd> untuk menaruh peti di petak itu; petak yang sudah terisi ditumpuk jadi tingkat 2. Tekan <kbd>Q</kbd> untuk merakit. <kbd>R</kbd> buka/tutup buku ini.</p>
+    </div>
+  </div>
+
+  <div id="chat" class="chat">
+    <div id="chat-log" class="chat-log"></div>
+    <form id="chat-form" class="chat-form" hidden>
+      <button type="button" id="chat-ch" class="chat-ch" title="Tab = ganti Semua / Tim">Semua</button>
+      <input id="chat-in" maxlength="120" autocomplete="off" enterkeyhint="send" placeholder="Ketik pesan · Tab ganti Semua/Tim · Esc batal">
+    </form>
   </div>
 
   <div id="lobby" class="overlay">
@@ -33,28 +71,26 @@
       </div>
 
       <div id="room-view" hidden>
-        <label>Peta</label>
+        <label>Peta <small id="maps-note" class="muted"></small></label>
         <div id="maps" class="teams"></div>
-        <label>Ruang tunggu <small class="muted">· klik tim untuk pindah</small></label>
+        <label>Ruang tunggu <small class="muted">· klik tim untuk pindah · 👑 = room master</small></label>
         <div id="room" class="room"></div>
         <label class="check"><input type="checkbox" id="cpu"> Isi tim kosong dengan CPU <small class="muted">(kalau mati, tim tanpa pemain langsung gugur)</small></label>
         <button id="ready" class="big">SIAP!</button>
+        <p class="muted chat-tip"><kbd>Enter</kbd> chat semua · <kbd>Shift</kbd>+<kbd>Enter</kbd> chat tim</p>
       </div>
       <p id="status" class="status">Menghubungkan ke server…</p>
 
       <div class="howto">
         <b>Cara main</b>
-        <p>Peti jatuh dari langit di tengah peta. Angkat peti, bawa ke <i>pad</i> 2×2 di samping markasmu, susun, lalu rakit:</p>
-        <ul>
-          <li><b>1 peti</b> → senjata acak (SMG / Shotgun / Bazooka)</li>
-          <li><b>4 peti</b> → rekrut Buddy (bot) baru</li>
-          <li><b>8 peti</b> (2 tingkat) → Turret, Tank, atau Jeep</li>
-        </ul>
+        <p>Peti jatuh dari langit di tengah peta. Angkat peti, bawa ke <i>pad</i> 2×2 di samping markasmu, <b>susun dengan pola tertentu</b>, lalu rakit dengan <kbd>Q</kbd>. Arahkan bidikan ke petak pad untuk memilih tempat peti:</p>
+        <div id="book-lobby" class="book"></div>
         <p><b>Awas:</b> monster raksasa menjaga zona peti, lubang besar berarti tewas, dan sesekali hujan meteor jatuh — lihat lingkaran merah! Dari atas bukit tembakanmu lebih jauh.</p>
-        <p>Ronde dimulai saat semua pemain menekan <b>Siap</b>. Setiap tim mulai tanpa Buddy — rakit sendiri dari peti. Hancurkan markas musuh untuk menang. Peti di pad musuh bisa dicuri!</p>
-        <p><b>8 peti</b> juga bisa jadi <b>Tank</b> (lambat, tebal, meriam) atau <b>Jeep</b> (cepat, senapan mesin, bisa menabrak). Dekati kendaraan timmu lalu tekan <kbd>E</kbd> untuk naik/turun; tanpa pengemudi kendaraan bergerak sendiri mengikuti perintah pasukan.</p>
-        <p><b>Perintah tim</b> (panel kiri): apa yang dirakit (<kbd>1</kbd> otomatis · <kbd>2</kbd> senjata · <kbd>3</kbd> Buddy · <kbd>4</kbd> Turret · <kbd>5</kbd> Tank · <kbd>6</kbd> Jeep), lalu tugas pasukan (<kbd>Z</kbd> ikuti aku · <kbd>X</kbd> bertahan · <kbd>C</kbd>…<kbd>N</kbd> serang markas tertentu).</p>
-        <p class="keys"><kbd>WASD</kbd> gerak · <kbd>Mouse</kbd> bidik · <kbd>Klik</kbd> tembak · <kbd>E</kbd> angkat/taruh · <kbd>F</kbd>/<kbd>Klik kanan</kbd> lempar · <kbd>Q</kbd> rakit · <kbd>Tab</kbd> skor · <kbd>M</kbd> suara · <kbd>G</kbd> grafis</p>
+        <p>Ronde dimulai saat semua pemain menekan <b>Siap</b>. Pemain pertama yang masuk jadi <b>room master</b> 👑: memilih peta, mengatur CPU, dan bisa mengeluarkan pemain (tombol ✕ atau chat <code>/kick nama</code>). Hancurkan markas musuh untuk menang. Peti di pad musuh bisa dicuri!</p>
+        <p><b>8 peti</b> juga bisa jadi <b>Tank</b> (lambat, tebal, meriam) atau <b>Jeep</b> (cepat, senapan mesin, bisa menabrak). Dekati kendaraan timmu lalu tekan <kbd>E</kbd> untuk naik/turun.</p>
+        <p><b>Perintah tim</b> (panel kiri): apa yang dirakit (<kbd>1</kbd> otomatis/pola · <kbd>2</kbd> senjata · <kbd>3</kbd> Buddy · <kbd>4</kbd> Turret · <kbd>5</kbd> Tank · <kbd>6</kbd> Jeep), lalu tugas pasukan (<kbd>Z</kbd> ikuti aku · <kbd>X</kbd> bertahan · <kbd>C</kbd>…<kbd>N</kbd> serang markas tertentu).</p>
+        <p class="keys"><kbd>WASD</kbd> gerak · <kbd>Mouse</kbd> bidik · <kbd>Klik</kbd> tembak · <kbd>E</kbd> angkat/taruh · <kbd>F</kbd>/<kbd>Klik kanan</kbd> lempar · <kbd>Q</kbd> rakit · <kbd>R</kbd> resep · <kbd>Enter</kbd> chat · <kbd>Tab</kbd> skor · <kbd>M</kbd> suara · <kbd>G</kbd> grafis</p>
+        <p class="keys"><b>HP / tablet:</b> stik kiri gerak, stik kanan bidik &amp; tembak, tombol E / F / Q di kanan. <b>Gamepad</b> (USB/Bluetooth): stik kiri gerak, stik kanan bidik, RT/RB tembak, A angkat, B lempar, X rakit, Y resep, Back skor, D-pad ganti rakitan, Start siap.</p>
       </div>
     </div>
   </div>

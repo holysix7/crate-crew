@@ -11,8 +11,10 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, f) => a + (b - a) * f;
 const lerpAng = (a, b, f) => { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * f; };
 
-const WNAME = ['Pistol', 'SMG', 'Shotgun', 'Bazooka', 'Meriam tank', 'Senapan mesin'];
-const WCOL = ['#d8d8d8', '#4fc3f7', '#ff8a65', '#9ccc65', '#c9b458', '#e0e0e0'];
+// urutan sama dengan WEAPONS di server (nama dari server menimpa saat welcome)
+let WNAME = ['Pistol', 'SMG', 'Shotgun', 'Bazooka', 'Meriam tank', 'Senapan mesin', 'Sniper', 'Pelontar api', 'Pelontar granat', 'Minigun', 'Laser'];
+const WCOL = ['#d8d8d8', '#4fc3f7', '#ff8a65', '#9ccc65', '#c9b458', '#e0e0e0', '#b388ff', '#ff7043', '#c0ca33', '#ffd54f', '#ff4081'];
+const GUN_LEN = [14, 18, 20, 26, 26, 20, 30, 20, 18, 22, 24], GUN_TH = [4.5, 4.5, 4.5, 7, 7, 4.5, 4, 7, 6.5, 6.5, 5];
 // jenis unit dari server: 0 pemain, 1 bot, 2 turret, 3 tank, 4 jeep
 const K_TANK = 3, K_JEEP = 4, K_MON = 5, VNAME = { 3: 'Tank', 4: 'Jeep' };
 const MON_COL = '#c77dff';
@@ -125,6 +127,9 @@ let shake = 0, aim = 0, time = 0, lastT = performance.now();
 const mouse = { x: 0, y: 0, down: false };
 const keys = {};
 let showScore = false, muted = false;
+// sumber bidikan: 'mouse' (raycast kursor) atau 'stick' (stik sentuh / gamepad, arah langsung)
+let aimMode = 'mouse', cursor = null;
+let kicked = '';
 let fps = 0, fpsN = 0, fpsT = 0, fpsLast = performance.now();
 let banner = null; // pengumuman event besar di tengah atas layar
 renderQualityButtons();
@@ -161,6 +166,8 @@ const near = (x, y) => clamp(1 - Math.hypot(x - cam.x, y - cam.y) / 900, 0, 1);
 const sfx = {
   shot: v => noise(0.06, 2600, 0.10 * v, 'highpass'),
   rocket: v => noise(0.25, 900, 0.18 * v),
+  flame: v => noise(0.12, 700, 0.05 * v),
+  laser: v => tone(1500, 0.14, 0.05 * v, 'sawtooth', -1000),
   boom: v => { noise(0.7, 380, 0.55 * v); tone(90, 0.4, 0.2 * v, 'sine', -50); },
   thud: v => noise(0.14, 260, 0.35 * v),
   bonk: v => tone(420, 0.12, 0.12 * v, 'square', -250),
@@ -174,25 +181,38 @@ const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') +
 const send = o => { if (ws.readyState === 1) ws.send(JSON.stringify(o)); };
 ws.onopen = () => { $('status').textContent = 'Terhubung ke ' + location.host; };
 ws.onclose = () => {
-  $('status').textContent = 'Terputus dari server. Muat ulang halaman.';
+  $('status').textContent = kicked ? `Kamu dikeluarkan dari ruangan oleh room master (${kicked}).` : 'Terputus dari server. Muat ulang halaman.';
   $('join').disabled = true; joined = false;
-  updateRoom(); updateOrders();
+  closeChat(); updateRoom(); updateOrders(); updateTouch();
 };
 ws.onmessage = e => {
   const m = JSON.parse(e.data);
   if (m.t === 'welcome') onWelcome(m);
   else if (m.t === 'joined') { myId = m.id; myTeam = m.team; joined = true; updateRoom(); }
   else if (m.t === 's') onSnap(m);
+  else if (m.t === 'chat') onChat(m);
+  else if (m.t === 'kicked') kicked = m.by;
 };
 
 function onWelcome(m) {
   meta = m;
+  if (m.wlabels) WNAME = m.wlabels.map((n, i) => (i === 4 ? 'Meriam tank' : n));
   if (world && world.mapId !== m.map.id) disposeWorld(); // server mengganti peta
   if (!world) world = buildWorld();
   roomKey = '';
   $('join').disabled = false;
   renderTeamButtons();
+  renderBook();
 }
+// buku resep pola susunan (data dari server). Grid 2×2: b = peti tingkat 1, t = ditumpuk 2 tingkat
+function renderBook() {
+  const html = (meta.recipes || []).map(r => `<div class="rcp"><div class="grid">${[0, 1, 2, 3].map(i =>
+    `<i class="${(r.hi >> i) & 1 ? 't' : (r.lo >> i) & 1 ? 'b' : ''}"></i>`).join('')}</div><div><b>${esc(r.name)}</b><small>${esc(r.desc)}</small></div></div>`).join('');
+  $('book-lobby').innerHTML = html; $('book-list').innerHTML = html;
+}
+const toggleBook = v => $('book').classList.toggle('hidden', v === undefined ? undefined : !v);
+$('book-x').onclick = () => toggleBook(false);
+$('book').onclick = e => { if (e.target.id === 'book') toggleBook(false); };
 function renderTeamButtons() {
   if (!meta) return;
   const box = $('teams');
@@ -218,19 +238,23 @@ function updateRoom() {
   if (!inRoom() || !meta || !latest.lb) { roomKey = ''; return; }
   const [cpu, cd, active] = latest.lb;
   const me = latest.PL.find(p => p[0] === myId);
-  const key = JSON.stringify([latest.PL.map(p => [p[0], p[1], p[2], p[7]]), latest.lb, latest.st, myTeam, meta.map.id]);
+  const master = latest.ms, amMaster = master === myId;
+  const key = JSON.stringify([latest.PL.map(p => [p[0], p[1], p[2], p[7]]), latest.lb, latest.st, myTeam, meta.map.id, master]);
   if (key === roomKey) return;
   roomKey = key;
-  // pilihan peta (siapa pun bisa mengganti; status siap semua pemain direset)
+  // pilihan peta: hanya room master (status siap semua pemain direset saat diganti)
   const maps = $('maps');
   maps.innerHTML = '';
   (meta.maps || []).forEach((mp, i) => {
     const b = document.createElement('button');
     b.textContent = mp.name;
     if (mp.id === meta.map.id) b.classList.add('sel');
-    b.onclick = () => send({ t: 'map', i });
+    b.disabled = !amMaster && mp.id !== meta.map.id;
+    b.onclick = () => { if (amMaster) send({ t: 'map', i }); };
     maps.appendChild(b);
   });
+  const mName = (latest.PL.find(p => p[0] === master) || [])[1];
+  $('maps-note').textContent = amMaster ? '· kamu room master 👑' : mName ? `· dipilih room master (${mName})` : '';
   const room = $('room');
   room.innerHTML = '';
   meta.names.forEach((n, t) => {
@@ -238,13 +262,22 @@ function updateRoom() {
     col.className = 'col' + (t === myTeam ? ' mine' : '');
     col.style.setProperty('--c', meta.colors[t]);
     const ps = latest.PL.filter(p => p[2] === t);
+    // room master melihat tombol keluarkan (✕) & serahkan master (👑) di samping pemain lain
+    const tools = p => (amMaster && p[0] !== myId
+      ? `<span class="pa"><span data-give="${p[0]}" title="Jadikan room master">👑</span><span class="kick" data-kick="${p[0]}" title="Keluarkan dari ruangan">✕</span></span>` : '');
     col.innerHTML = `<b>${esc(n)}</b>` + (ps.length
-      ? ps.map(p => `<div class="${p[7] ? 'ok' : 'wait'}">${p[7] ? '✓' : '…'} ${esc(p[1])}${p[0] === myId ? ' (kamu)' : ''}</div>`).join('')
+      ? ps.map(p => `<div class="${p[7] ? 'ok' : 'wait'}">${tools(p)}${p[7] ? '✓' : '…'} ${esc(p[1])}${p[0] === master ? ' 👑' : ''}${p[0] === myId ? ' (kamu)' : ''}</div>`).join('')
       : `<div class="${cpu ? 'cpu' : 'empty'}">${cpu ? 'CPU' : 'kosong — gugur'}</div>`);
-    col.onclick = () => send({ t: 'team', team: t });
+    col.onclick = e => {
+      const k = e.target.closest('[data-kick]'), g = e.target.closest('[data-give]');
+      if (k) send({ t: 'kick', id: +k.dataset.kick });
+      else if (g) send({ t: 'master', id: +g.dataset.give });
+      else send({ t: 'team', team: t });
+    };
     room.appendChild(col);
   });
   $('cpu').checked = !!cpu;
+  $('cpu').disabled = !amMaster;
   const ready = !!(me && me[7]);
   $('ready').textContent = ready ? 'BATAL SIAP' : 'SIAP!';
   $('ready').classList.toggle('on', ready);
@@ -260,7 +293,7 @@ $('ready').onclick = () => {
 $('cpu').onchange = e => send({ t: 'cpu', v: e.target.checked });
 
 // ---------------- perintah tim ----------------
-const BUILD_OPTS = [['auto', 'Otomatis'], ['weapon', 'Senjata · 1 peti'], ['buddy', 'Buddy · 4 peti'],
+const BUILD_OPTS = [['auto', 'Otomatis · pola'], ['weapon', 'Senjata · pola/1'], ['buddy', 'Buddy · 4 peti'],
   ['turret', 'Turret · 8 peti'], ['tank', 'Tank · 8 peti'], ['jeep', 'Jeep · 8 peti']];
 const PLAN_NAME = { weapon: 'Senjata', buddy: 'Buddy', turret: 'Turret', tank: 'Tank', jeep: 'Jeep' };
 const MODE_KEYS = ['Z', 'X', 'C', 'V', 'B', 'N'];
@@ -344,9 +377,9 @@ function onSnap(m) {
     cur.add(b[0]);
     if (!prevBullets.has(b[0]) && shots < 3) {
       shots++;
-      const v = near(b[1], b[2]);
-      if (b[3]) sfx.rocket(v); else sfx.shot(v);
-      spawnP(b[1], b[2], GUN_H, 0, 0, 0, 0.06, 6, '#fff3b0');
+      const v = near(b[1], b[2]), ty = b[3];
+      if (ty === 3) sfx.flame(v); else if (ty === 5) sfx.laser(v); else if (ty) sfx.rocket(v); else sfx.shot(v);
+      if (ty !== 3) spawnP(b[1], b[2], GUN_H, 0, 0, 0, 0.06, 6, ty === 5 ? '#ff9fd0' : '#fff3b0');
     }
   }
   prevBullets = cur;
@@ -354,6 +387,7 @@ function onSnap(m) {
   if (!joined && ++snapCount % 30 === 0) renderTeamButtons();
   updateRoom();
   updateOrders();
+  updateTouch();
 }
 
 // ---------------- partikel (InstancedMesh, 3D) ----------------
@@ -429,7 +463,18 @@ function onEvent(e) {
       pushFeed(`<b style="color:#ffb347">${esc(e.name)}</b> ${esc(e.d)}`);
       tone(880, 0.15, 0.08, 'square'); tone(660, 0.15, 0.08, 'square', 0, 0.18); tone(880, 0.25, 0.08, 'square', 0, 0.36);
       break;
-    case 'mapset': pushFeed(`${esc(e.n)} memilih peta <b style="color:#f6c453">${esc(e.name)}</b>`); break;
+    case 'mapset':
+      pushFeed(`${esc(e.n)} memilih peta <b style="color:#f6c453">${esc(e.name)}</b>`);
+      chatLine(null, `${e.n} memilih peta ${e.name}`);
+      break;
+    case 'master':
+      pushFeed(`<b style="color:#f6c453">${esc(e.n)}</b> sekarang room master`);
+      chatLine(null, `👑 ${e.n} sekarang room master`);
+      break;
+    case 'kick':
+      pushFeed(`${esc(e.n)} dikeluarkan oleh ${esc(e.by)}`);
+      chatLine(null, `${e.n} dikeluarkan oleh room master ${e.by}`);
+      break;
     case 'build':
       floaters.push({ x: e.x, y: e.y, h: 50, txt: e.w, col: tcol(e.t), t: 1.6 });
       burst(e.x, e.y, 14, 18, '#fff6c8', 140, 0.6, 2.5, 80);
@@ -446,30 +491,65 @@ function onEvent(e) {
     case 'order':
       if (e.t === myTeam) pushFeed(`<b style="color:${tcol(e.t)}">${esc(e.n)}</b>: ${esc(e.txt)}`);
       break;
-    case 'join': pushFeed(`${esc(e.n)} bergabung ke tim <b style="color:${tcol(e.t)}">${tname(e.t)}</b>`); break;
-    case 'leave': pushFeed(`${esc(e.n)} keluar`); break;
+    case 'join': pushFeed(`${esc(e.n)} bergabung ke tim <b style="color:${tcol(e.t)}">${tname(e.t)}</b>`); chatLine(null, `${e.n} masuk ruangan`); break;
+    case 'leave': pushFeed(`${esc(e.n)} keluar`); chatLine(null, `${e.n} keluar`); break;
   }
 }
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-// ---------------- input ----------------
+// ---------------- pad: petak yang dibidik saat menaruh peti ----------------
+let lastMe = null; // unit yang dikendalikan pada frame terakhir
+// sama dengan cellOrder di server: petak terurut dari yang terdekat ke kolom yang dibidik
+const cellOrder = col => [0, 1, 2, 3].sort((i, j) =>
+  Math.abs((i & 1) - (col & 1)) + Math.abs((i >> 1) - (col >> 1)) - Math.abs((j & 1) - (col & 1)) - Math.abs((j >> 1) - (col >> 1)) || i - j);
+function slotPos(k) {
+  const b = meta.map.bases[myTeam], T = meta.map.tile, c = k % 4;
+  return { x: b.pad.x + (c % 2 ? T / 2 : -T / 2), y: b.pad.y + (c < 2 ? -T / 2 : T / 2), z: k >= 4 ? meta.map.crateH : 0 };
+}
+// { col: kolom yang dibidik, slot: tempat peti akan mendarat (-1 = pad penuh) }, null bila terlalu jauh dari pad
+function padTarget(me) {
+  if (!me || myTeam < 0 || !latest) return null;
+  const b = meta.map.bases[myTeam], T = meta.map.tile;
+  if (Math.hypot(me.x - b.pad.x, me.y - b.pad.y) >= 72) return null;
+  let px = me.x + Math.cos(aim) * 30, py = me.y + Math.sin(aim) * 30;
+  if (aimMode === 'mouse' && cursor && Math.abs(cursor.x - b.pad.x) < T * 1.5 && Math.abs(cursor.y - b.pad.y) < T * 1.5) { px = cursor.x; py = cursor.y; }
+  let col = 0, bd = Infinity;
+  for (let k = 0; k < 4; k++) { const s = slotPos(k), d = Math.hypot(s.x - px, s.y - py); if (d < bd) { bd = d; col = k; } }
+  const mask = latest.pm ? latest.pm[myTeam] : 0;
+  for (const k of cellOrder(col)) {
+    if (!((mask >> k) & 1)) return { col, slot: k };
+    if (!((mask >> (k + 4)) & 1)) return { col, slot: k + 4 };
+  }
+  return { col, slot: -1 };
+}
+function sendGrab() {
+  const t = lastMe && lastMe.carry ? padTarget(lastMe) : null;
+  send({ t: 'act', k: 'grab', c: t ? t.col : -1 });
+}
+
+// ---------------- input: keyboard & mouse ----------------
+const typing = () => { const a = document.activeElement; return a && a.tagName === 'INPUT' && a.type !== 'checkbox'; };
 addEventListener('keydown', e => {
-  if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+  if (typing()) return;
+  if (e.key === 'Enter' && joined && !e.isComposing) { e.preventDefault(); openChat(e.shiftKey); return; }
   if (e.code === 'Tab') { e.preventDefault(); showScore = true; }
+  if (e.code === 'Escape') toggleBook(false);
   if (keys[e.code]) return;
   keys[e.code] = true;
   if (e.code === 'KeyG') setQuality(QNAMES[(QNAMES.indexOf(qName) + 1) % QNAMES.length]);
+  if (e.code === 'KeyR') toggleBook();
   if (!joined) return;
   if (orderKey(e.code)) return;
-  if (e.code === 'KeyE') send({ t: 'act', k: 'grab' });
+  if (e.code === 'KeyE') sendGrab();
   if (e.code === 'KeyF') send({ t: 'act', k: 'throw' });
   if (e.code === 'KeyQ') send({ t: 'act', k: 'build' });
   if (e.code === 'KeyM') muted = !muted;
 });
 addEventListener('keyup', e => { keys[e.code] = false; if (e.code === 'Tab') showScore = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouse.down = false; });
-cv.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+cv.addEventListener('mousemove', e => { if (useTouch) return; mouse.x = e.clientX; mouse.y = e.clientY; aimMode = 'mouse'; });
 cv.addEventListener('mousedown', e => {
+  if (useTouch) return;
   initAudio();
   if (e.button === 0) mouse.down = true;
   if (e.button === 2 && joined) send({ t: 'act', k: 'throw' });
@@ -477,12 +557,194 @@ cv.addEventListener('mousedown', e => {
 addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
 cv.addEventListener('contextmenu', e => e.preventDefault());
 
+// ---------------- chat (Enter = semua, Shift+Enter = tim) ----------------
+let chatTeam = false;
+const chatOpen = () => !$('chat-form').hidden;
+function renderChatCh() { const b = $('chat-ch'); b.textContent = chatTeam ? 'Tim' : 'Semua'; b.classList.toggle('team', chatTeam); }
+function openChat(team) {
+  if (!joined) return;
+  chatTeam = !!team; renderChatCh();
+  for (const k in keys) keys[k] = false; // jangan sampai pemain terus berjalan selama mengetik
+  mouse.down = false; showScore = false; touchReset();
+  $('chat-form').hidden = false; $('chat').classList.add('open');
+  $('chat-in').focus();
+  const log = $('chat-log'); log.scrollTop = log.scrollHeight;
+}
+function closeChat() {
+  $('chat-form').hidden = true; $('chat').classList.remove('open');
+  $('chat-in').value = ''; $('chat-in').blur();
+  const log = $('chat-log'); log.scrollTop = log.scrollHeight;
+}
+$('chat-form').onsubmit = e => e.preventDefault();
+$('chat-in').addEventListener('keydown', e => {
+  e.stopPropagation();
+  if (e.key === 'Enter' && !e.isComposing) {
+    e.preventDefault();
+    const s = e.target.value.trim();
+    if (s) send({ t: 'chat', s, team: chatTeam });
+    closeChat();
+  } else if (e.key === 'Escape') { e.preventDefault(); closeChat(); }
+  else if (e.key === 'Tab') { e.preventDefault(); chatTeam = !chatTeam; renderChatCh(); }
+});
+// klik/tap di luar kolom chat = batal (jeda sebentar supaya tombol Semua/Tim sempat mengembalikan fokus)
+$('chat-in').addEventListener('blur', () => setTimeout(() => { if (chatOpen() && document.activeElement !== $('chat-in')) closeChat(); }, 150));
+$('chat-ch').onpointerdown = e => e.preventDefault();
+$('chat-ch').onclick = () => { chatTeam = !chatTeam; renderChatCh(); $('chat-in').focus(); };
+function onChat(m) {
+  if (m.sys) { chatLine(null, m.s); return; }
+  chatLine(m, m.s);
+  if (m.id !== myId) tone(990, 0.05, 0.03, 'sine');
+}
+function chatLine(m, s) {
+  const log = $('chat-log'), d = document.createElement('div');
+  d.className = 'ln' + (m ? '' : ' sys');
+  if (m) d.innerHTML = `<span class="ch">[${m.team ? 'Tim' : 'Semua'}]</span> <b style="color:${tcol(m.tm)}">${esc(m.n)}</b>: ${esc(s)}`;
+  else d.textContent = s;
+  log.appendChild(d);
+  while (log.children.length > 60) log.firstChild.remove();
+  log.scrollTop = log.scrollHeight;
+  setTimeout(() => d.classList.add('old'), 9000);
+}
+
+// ---------------- gamepad sentuh (HP / tablet) ----------------
+// stik kiri = gerak, stik kanan = bidik (+ tembak bila didorong jauh). Stik muncul di titik sentuhan pertama.
+let useTouch = matchMedia('(pointer: coarse)').matches;
+const STICK_R = 52;
+const sticks = { l: null, r: null };
+const tin = { mx: 0, my: 0, fire: false, aiming: false };
+addEventListener('pointerdown', e => { if (e.pointerType === 'touch' && !useTouch) { useTouch = true; updateTouch(); } }, true);
+addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && useTouch && !matchMedia('(pointer: coarse)').matches) { useTouch = false; touchReset(); updateTouch(); } });
+function updateTouch() {
+  const on = useTouch && joined && !inRoom();
+  $('touch').classList.toggle('hidden', !on);
+  document.body.classList.toggle('touch', useTouch);
+  document.body.classList.toggle('playing', joined && !inRoom());
+  if (!on && (sticks.l || sticks.r)) touchReset();
+}
+function placeStick(side, st) {
+  const el = $(side === 'l' ? 'stick-l' : 'stick-r'), knob = el.firstElementChild;
+  el.classList.toggle('on', !!st);
+  el.style.left = (st ? st.ox : side === 'l' ? 100 : IW - 100) + 'px';
+  el.style.top = (st ? st.oy : IH - 90) + 'px';
+  knob.style.transform = st ? `translate(${st.dx * STICK_R}px, ${st.dy * STICK_R}px)` : '';
+}
+function applySticks() {
+  const l = sticks.l, r = sticks.r;
+  const lm = l ? Math.hypot(l.dx, l.dy) : 0, rm = r ? Math.hypot(r.dx, r.dy) : 0;
+  tin.mx = lm > 0.15 ? l.dx : 0; tin.my = lm > 0.15 ? l.dy : 0;
+  tin.aiming = rm > 0.2;
+  if (tin.aiming) aim = Math.atan2(r.dy, r.dx);
+  tin.fire = rm > 0.45;
+  if (l || r) aimMode = 'stick';
+}
+function touchReset() { sticks.l = sticks.r = null; placeStick('l', null); placeStick('r', null); applySticks(); }
+const tz = $('tzone');
+tz.addEventListener('pointerdown', e => {
+  e.preventDefault(); initAudio();
+  const side = e.clientX < IW / 2 ? 'l' : 'r';
+  if (sticks[side]) return;
+  sticks[side] = { id: e.pointerId, ox: e.clientX, oy: e.clientY, dx: 0, dy: 0 };
+  try { tz.setPointerCapture(e.pointerId); } catch (err) {}
+  placeStick(side, sticks[side]); applySticks();
+});
+tz.addEventListener('pointermove', e => {
+  for (const side of ['l', 'r']) {
+    const st = sticks[side];
+    if (!st || st.id !== e.pointerId) continue;
+    let dx = (e.clientX - st.ox) / STICK_R, dy = (e.clientY - st.oy) / STICK_R;
+    const len = Math.hypot(dx, dy);
+    if (len > 1) { // pangkal stik ikut tertarik supaya jari tidak "mentok"
+      st.ox = e.clientX - (dx / len) * STICK_R; st.oy = e.clientY - (dy / len) * STICK_R;
+      dx /= len; dy /= len;
+    }
+    st.dx = dx; st.dy = dy;
+    placeStick(side, st); applySticks();
+  }
+});
+const endStick = e => {
+  for (const side of ['l', 'r']) if (sticks[side] && sticks[side].id === e.pointerId) { sticks[side] = null; placeStick(side, null); }
+  applySticks();
+};
+tz.addEventListener('pointerup', endStick);
+tz.addEventListener('pointercancel', endStick);
+for (const b of document.querySelectorAll('#touch [data-act]')) {
+  b.addEventListener('pointerdown', e => {
+    e.preventDefault(); initAudio(); b.classList.add('down');
+    if (b.dataset.act === 'grab') sendGrab(); else send({ t: 'act', k: b.dataset.act });
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => b.classList.remove('down'));
+}
+function toggleFullscreen() {
+  const d = document.documentElement;
+  try {
+    if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+    const p = (d.requestFullscreen || d.webkitRequestFullscreen).call(d);
+    if (p && p.then) p.then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {});
+  } catch (err) {} // iPhone Safari tidak mendukung layar penuh untuk halaman web
+}
+for (const b of document.querySelectorAll('#touch [data-ui]')) {
+  b.addEventListener('click', () => {
+    const k = b.dataset.ui;
+    if (k === 'orders') b.classList.toggle('sel', $('orders').classList.toggle('show'));
+    else if (k === 'book') toggleBook();
+    else if (k === 'score') b.classList.toggle('sel', (showScore = !showScore));
+    else if (k === 'chat') openChat(false);
+    else if (k === 'full') toggleFullscreen();
+  });
+}
+addEventListener('resize', () => { if (!sticks.l) placeStick('l', null); if (!sticks.r) placeStick('r', null); });
+placeStick('l', null); placeStick('r', null);
+
+// ---------------- gamepad fisik (Gamepad API, USB / Bluetooth, juga di HP) ----------------
+// Tata letak "standard": 0 A, 1 B, 2 X, 3 Y, 5 RB, 7 RT, 8 Back, 9 Start, 12–15 D-pad
+const gin = { mx: 0, my: 0, fire: false, aiming: false }, gpPrev = [];
+function cycleOrder(dir, build) {
+  if (!latest || !latest.or || myTeam < 0 || inRoom()) return;
+  const [b, mode, target] = latest.or[myTeam];
+  if (build) {
+    const i = BUILD_OPTS.findIndex(o => o[0] === b);
+    sendBuild(BUILD_OPTS[(i + dir + BUILD_OPTS.length) % BUILD_OPTS.length][0]);
+  } else {
+    const opts = modeOpts().filter(o => !(o.mode === 'attack' && o.target >= 0 && !latest.al[o.target]));
+    const i = opts.findIndex(o => o.mode === mode && (o.mode !== 'attack' || o.target === target));
+    sendMode(opts[(i + dir + opts.length) % opts.length]);
+  }
+}
+function pollGamepad() {
+  gin.mx = gin.my = 0; gin.fire = gin.aiming = false;
+  const gp = navigator.getGamepads ? [...navigator.getGamepads()].find(g => g && g.connected) : null;
+  if (!gp) return;
+  const ax = i => { const v = gp.axes[i] || 0; return Math.abs(v) < 0.2 ? 0 : v; };
+  const btn = i => !!(gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.4));
+  const press = i => btn(i) && !gpPrev[i];
+  gin.mx = ax(0); gin.my = ax(1);
+  const rx = ax(2), ry = ax(3);
+  if (Math.hypot(rx, ry) > 0.3) { aim = Math.atan2(ry, rx); gin.aiming = true; aimMode = 'stick'; }
+  else if (gin.mx || gin.my) aimMode = 'stick';
+  gin.fire = btn(7) || btn(5);
+  if (!chatOpen()) {
+    if (joined && press(0)) sendGrab();
+    if (joined && press(1)) send({ t: 'act', k: 'throw' });
+    if (joined && press(2)) send({ t: 'act', k: 'build' });
+    if (press(3)) toggleBook();
+    if (press(9) && inRoom()) $('ready').onclick();
+    if (press(14) || press(15)) cycleOrder(press(15) ? 1 : -1, true);
+    if (press(12) || press(13)) cycleOrder(press(13) ? 1 : -1, false);
+    if (btn(8) !== !!gpPrev[8]) showScore = btn(8);
+  }
+  for (let i = 0; i < gp.buttons.length; i++) gpPrev[i] = btn(i);
+}
+
 setInterval(() => {
+  pollGamepad();
   if (!joined) return;
   const k = c => (keys[c] ? 1 : 0);
-  const mx = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft');
-  const my = k('KeyS') + k('ArrowDown') - k('KeyW') - k('ArrowUp');
-  send({ t: 'in', mx: clamp(mx, -1, 1), my: clamp(my, -1, 1), a: +aim.toFixed(3), f: mouse.down ? 1 : 0 });
+  const smx = tin.mx + gin.mx, smy = tin.my + gin.my;
+  const mx = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft') + smx;
+  const my = k('KeyS') + k('ArrowDown') - k('KeyW') - k('ArrowUp') + smy;
+  // stik tanpa bidikan stik kanan: hadap ke arah jalan
+  if (aimMode === 'stick' && !tin.aiming && !gin.aiming && Math.hypot(smx, smy) > 0.3) aim = Math.atan2(smy, smx);
+  send({ t: 'in', mx: clamp(mx, -1, 1), my: clamp(my, -1, 1), a: +aim.toFixed(3), f: mouse.down || tin.fire || gin.fire ? 1 : 0 });
 }, 33);
 
 // ---------------- interpolasi ----------------
@@ -498,7 +760,7 @@ function sampleState() {
     const p = a.Um.get(u[0]);
     return { id: u[0], team: u[1], x: p ? lerp(p[2], u[2], f) : u[2], y: p ? lerp(p[3], u[3], f) : u[3], a: p ? lerpAng(p[4], u[4], f) : u[4],
       hp: u[5], max: u[6], w: u[7], carry: u[8], kind: u[9], owner: u[10], moving: u[11], ammo: u[12], shield: u[13],
-      hull: p ? lerpAng(p[14], u[14], f) : u[14], anim: u[15], rage: u[16] };
+      hull: p ? lerpAng(p[14], u[14], f) : u[14], anim: u[15], rage: u[16], elite: u[17] };
   });
   const crates = b.C.map(c => {
     const p = a.Cm.get(c[0]);
@@ -869,6 +1131,10 @@ function buildWorld() {
   W.mat.blob = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.3, depthWrite: false });
   W.mat.blob.visible = Q.shadows === 0;
   W.mat.rocket = new THREE.MeshStandardMaterial({ color: '#556b2f', emissive: '#ff7a1a', emissiveIntensity: 0.6 });
+  W.mat.flame = new THREE.MeshBasicMaterial({ color: '#ff9a3c', transparent: true, opacity: 0.55, depthWrite: false });
+  W.mat.grenade = new THREE.MeshStandardMaterial({ color: '#4b5320', roughness: 0.6, metalness: 0.3 });
+  W.mat.laser = new THREE.MeshBasicMaterial({ color: '#ff5fb0' });
+  W.mat.gold = new THREE.MeshStandardMaterial({ color: '#ffd54f', emissive: '#a06a00', emissiveIntensity: 0.5, roughness: 0.3, metalness: 0.7 });
   W.mat.team = meta.colors.map(c => new THREE.MeshStandardMaterial({ map: W.mat.suit, color: c, roughness: 0.6 }));
   W.mat.teamFlat = meta.colors.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.5 }));
   // kendaraan: pelat logam bercat warna tim (dicampur hijau militer), rantai bergerak, kaca gelap
@@ -940,6 +1206,10 @@ function buildWorld() {
     W.root.add(pad);
     W.hq.push({ intact, ruin, flag, smokeT: 0 });
   }
+  // bayangan peti transparan: petak pad yang akan diisi saat menekan E
+  W.ghost = new THREE.Mesh(W.geo.crate, new THREE.MeshBasicMaterial({ color: '#fff6c8', transparent: true, opacity: 0.4, depthWrite: false }));
+  W.ghost.scale.setScalar(1.08); W.ghost.visible = false;
+  W.root.add(W.ghost);
 
   // pepohonan di luar arena
   const trunkG = new THREE.CylinderGeometry(4, 6, 30, 7).translate(0, 15, 0);
@@ -1001,7 +1271,7 @@ function makeGun() {
 function setGun(g, w) {
   if (g.userData.w === w) return;
   g.userData.w = w;
-  const len = [14, 18, 20, 26][w], th = w === 3 ? 7 : 4.5;
+  const len = GUN_LEN[w] || 18, th = GUN_TH[w] || 4.5;
   g.userData.body.scale.set(len, th, th);
   g.userData.stripe.scale.set(len * 0.6, th + 0.6, th * 0.5);
   g.userData.stripe.position.set(len * 0.25, 0.4, 0);
@@ -1029,13 +1299,17 @@ function makeBuddy(u) {
   rig.add(body, visor, ...eyes, ...feet, gun);
   if (u.kind === 1) {
     const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 9, 6), M.metalLight); ant.position.set(-2, 35, 0);
-    const tip = new THREE.Mesh(world.geo.sphere, M.teamFlat[u.team]); tip.scale.setScalar(2.6); tip.position.set(-2, 40, 0);
+    const tip = new THREE.Mesh(world.geo.sphere, u.elite ? M.gold : M.teamFlat[u.team]); tip.scale.setScalar(u.elite ? 3.4 : 2.6); tip.position.set(-2, 40, 0);
     rig.add(ant, tip);
+    if (u.elite) { // Buddy Elit: helm emas
+      const helm = new THREE.Mesh(world.geo.sphere, M.gold); helm.scale.set(12.6, 6, 12.6); helm.position.y = 28; helm.castShadow = true;
+      rig.add(helm);
+    }
   }
   const shield = new THREE.Mesh(world.geo.sphere, M.shield);
   shield.scale.set(22, 24, 22); shield.position.y = 17;
   root.add(shield, blob(11));
-  root.scale.setScalar(1.25); // sedikit lebih besar dari radius tabrakan supaya terbaca jelas
+  root.scale.setScalar(u.elite ? 1.45 : 1.25); // sedikit lebih besar dari radius tabrakan supaya terbaca jelas
   root.userData = { rig, feet, gun, shield };
   return root;
 }
@@ -1238,14 +1512,38 @@ function updateWorld(S, me, dt) {
   });
   // peluru
   sync(W.bullets, S.bullets, b => b.id + ':' + b.rocket, b => {
-    // rocket: 0 peluru, 1 roket/meriam, 2 batu lemparan monster
-    const m = b.rocket === 2 ? new THREE.Mesh(W.geo.rock, W.mat.rock)
-      : new THREE.Mesh(b.rocket ? W.geo.rocket : W.geo.bullet, b.rocket ? W.mat.rocket : W.mat.bullet);
-    if (b.rocket === 2) m.scale.setScalar(9);
-    if (b.rocket) m.castShadow = true;
+    // rocket = jenis: 0 peluru, 1 roket/meriam, 2 batu lemparan monster, 3 api, 4 granat, 5 laser
+    const ty = b.rocket;
+    const m = ty === 2 ? new THREE.Mesh(W.geo.rock, W.mat.rock)
+      : ty === 3 ? new THREE.Mesh(W.geo.sphere, W.mat.flame)
+      : ty === 4 ? new THREE.Mesh(W.geo.sphere, W.mat.grenade)
+      : ty === 5 ? new THREE.Mesh(W.geo.bullet, W.mat.laser)
+      : new THREE.Mesh(ty ? W.geo.rocket : W.geo.bullet, ty ? W.mat.rocket : W.mat.bullet);
+    if (ty === 2) m.scale.setScalar(9);
+    if (ty === 4) m.scale.setScalar(4);
+    if (ty === 1 || ty === 2 || ty === 4) m.castShadow = true;
+    m.userData.t0 = time;
     return m;
   }, (m, b) => {
-    const dx = b.x - b.px, dy = b.y - b.py, gh = hAt(b.x, b.y) + GUN_H;
+    const dx = b.x - b.px, dy = b.y - b.py, gh = hAt(b.x, b.y) + GUN_H, age = time - m.userData.t0;
+    if (b.rocket === 3) { // semburan api: membesar & memudar, meninggalkan bara
+      m.position.set(b.x, gh, b.y);
+      m.scale.setScalar(3 + Math.min(1, age / 0.45) * 10);
+      if (Math.random() < 0.5 * Q.particles) spawnP(b.x, b.y, GUN_H, (Math.random() - 0.5) * 40, (Math.random() - 0.5) * 40, 30, 0.35, 3 + Math.random() * 3, Math.random() < 0.5 ? '#ffb347' : '#ff5a1f');
+      return;
+    }
+    if (b.rocket === 4) { // granat: melambung (lengkung visual saja, server tetap 2D)
+      m.position.set(b.x, gh + Math.sin(Math.min(1, age / 0.9) * Math.PI) * 45, b.y);
+      m.rotation.set(time * 9, time * 6, 0);
+      return;
+    }
+    if (b.rocket === 5) {
+      const l = Math.hypot(dx, dy) || 1, len = Math.max(20, Math.min(60, l));
+      m.rotation.y = -Math.atan2(dy, dx);
+      m.scale.set(len, 2.6, 2.6);
+      m.position.set(b.x - dx / l * len / 2, gh, b.y - dy / l * len / 2);
+      return;
+    }
     if (b.rocket === 2) {
       m.position.set(b.x, gh + 26, b.y);
       m.rotation.set(time * 7, time * 5, 0);
@@ -1359,12 +1657,15 @@ function frame() {
   const map = meta.map;
   // unit yang dikendalikan: badan pemain, atau kendaraan yang sedang dikemudikan
   const me = S.units.find(u => u.owner === myId && (u.kind === 0 || isVeh(u))) || null;
+  lastMe = me;
   const names = new Map(latest.PL.map(p => [p[0], p[1]]));
 
-  // kamera: mengikuti pemain, sedikit condong ke arah mouse
+  // kamera: mengikuti pemain, sedikit condong ke arah bidikan (mouse atau stik)
   let tx = map.w / 2, ty = map.h / 2;
   const lead = 1000 / Math.max(1, IW);
-  if (me) {
+  if (me && aimMode === 'stick') {
+    tx = me.x + Math.cos(aim) * 50; ty = me.y + Math.sin(aim) * 45;
+  } else if (me) {
     tx = me.x + clamp((mouse.x - IW / 2) * lead, -300, 300) * 0.18;
     ty = me.y + clamp((mouse.y - IH / 2) * lead, -300, 300) * 0.22;
   } else if (myTeam >= 0) {
@@ -1381,18 +1682,28 @@ function frame() {
   sun.position.set(cam.x + SUN_DIR.x * 1000, SUN_DIR.y * 1000, cam.y + SUN_DIR.z * 1000);
   sun.target.position.set(cam.x, 0, cam.y);
 
-  // bidikan: sinar dari mouse ke bidang setinggi senjata
-  if (me) {
+  // bidikan mouse: sinar dari kursor ke bidang setinggi senjata (stik sentuh / gamepad mengatur `aim` langsung)
+  if (me && aimMode === 'mouse') {
     ndc.set(mouse.x / IW * 2 - 1, -(mouse.y / IH) * 2 + 1);
     ray.setFromCamera(ndc, camera);
     const o = ray.ray.origin, d = ray.ray.direction;
     if (d.y < -1e-3) {
       const t = (GUN_H - o.y) / d.y;
       aim = Math.atan2(o.z + d.z * t - me.y, o.x + d.x * t - me.x);
+      const tp = (3 - o.y) / d.y; // titik di permukaan pad, untuk memilih petak
+      cursor = { x: o.x + d.x * tp, y: o.z + d.z * tp };
     }
   }
 
   updateWorld(S, me, dt);
+  // bayangan peti di petak pad yang akan diisi
+  const pt = me && me.carry ? padTarget(me) : null;
+  world.ghost.visible = !!(pt && pt.slot >= 0);
+  if (world.ghost.visible) {
+    const s = slotPos(pt.slot);
+    world.ghost.position.set(s.x, s.z + map.crateH / 2 + 3.5, s.y);
+    world.ghost.material.opacity = 0.3 + 0.15 * Math.sin(time * 8);
+  }
   renderer.render(scene, camera);
 
   // label dunia (diproyeksikan ke layar)
@@ -1401,8 +1712,8 @@ function frame() {
     const p = toScreen(b.pad.x, 0, b.pad.y + map.tile + 14);
     if (p) {
       // pad sendiri menampilkan target rakitan dari perintah tim
-      const want = t === myTeam && latest.or ? latest.or[t][3] : 0;
-      const s = want ? `${latest.pad[t]}/${want} → ${PLAN_NAME[latest.or[t][0]]}` : latest.pad[t] + '/8';
+      const want = t === myTeam && latest.or ? latest.or[t][3] : 0, pr = t === myTeam && latest.pr ? latest.pr[t] : '';
+      const s = pr ? `${latest.pad[t]} → ${pr}` : want ? `${latest.pad[t]}/${want} → ${PLAN_NAME[latest.or[t][0]]}` : latest.pad[t] + '/8';
       ctx.font = '800 13px system-ui'; ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillText(s, p.x + 1, p.y + 1);
       ctx.fillStyle = '#fff'; ctx.fillText(s, p.x, p.y);
@@ -1441,8 +1752,16 @@ function frame() {
     ctx.fillStyle = f.col; ctx.fillText(f.txt, p.x, p.y);
   }
   ctx.globalAlpha = 1;
-  // bidikan
-  if (joined) {
+  // bidikan: arah stik ditandai lingkaran di depan pemain, mouse memakai crosshair
+  if (joined && aimMode === 'stick' && me) {
+    const R = isVeh(me) ? 90 : 70, g = hAt(me.x, me.y) + GUN_H;
+    const p = toScreen(me.x + Math.cos(aim) * R, g, me.y + Math.sin(aim) * R), q = toScreen(me.x + Math.cos(aim) * 26, g, me.y + Math.sin(aim) * 26);
+    if (p && q) {
+      ctx.strokeStyle = 'rgba(255,246,200,.6)'; ctx.lineWidth = 2; ctx.setLineDash([4, 5]);
+      ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(p.x, p.y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle = 'rgba(255,246,200,.9)'; ellipse(p.x, p.y, 7, 7); ctx.stroke();
+    }
+  } else if (joined && !useTouch) {
     ctx.strokeStyle = 'rgba(255,246,200,.85)'; ctx.lineWidth = 2;
     ellipse(mouse.x, mouse.y, 9, 9); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(mouse.x - 14, mouse.y); ctx.lineTo(mouse.x - 5, mouse.y); ctx.moveTo(mouse.x + 5, mouse.y); ctx.lineTo(mouse.x + 14, mouse.y);
@@ -1463,7 +1782,7 @@ function text(s, x, y, size, col, align = 'left', weight = 800) {
 function drawHUD(S, me, dt) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   const map = meta.map, T = map.tile;
-  const small = IW < 700;
+  const small = IW < 700 || useTouch;
 
   // status markas tiap tim
   const n = meta.teams, bw = small ? 104 : 150, gap = 8, total = n * bw + (n - 1) * gap;
@@ -1472,7 +1791,7 @@ function drawHUD(S, me, dt) {
     const x = x0 + t * (bw + gap);
     panel(x, 10, bw, 44);
     ctx.fillStyle = meta.colors[t]; rrect(x + 8, 18, 10, 10, 3); ctx.fill();
-    text(meta.names[t] + (t === myTeam ? ' (kamu)' : ''), x + 24, 28, 12, '#fff');
+    text(meta.names[t] + (t === myTeam ? (small ? ' ★' : ' (kamu)') : ''), x + 24, 28, 12, '#fff');
     text('📦 ' + latest.pad[t], x + bw - 8, 28, 11, '#d9c9a3', 'right', 700);
     if (latest.al[t]) hpBar(x + bw / 2, 38, bw - 16, latest.hq[t] / (meta.hqMax || 3200), meta.colors[t]);
     else text('HANCUR', x + bw / 2, 46, 12, '#ff6b6b', 'center', 900);
@@ -1482,16 +1801,17 @@ function drawHUD(S, me, dt) {
 
   // status pemain
   if (me) {
-    const pw = small ? 170 : 220;
-    panel(10, IH - 74, pw, 64);
-    text('HP', 20, IH - 52, 11, '#a9b8a0');
-    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(44, IH - 62, pw - 54, 12);
+    // di HP panel status pindah ke kiri atas (bawah kiri dipakai stik gerak)
+    const pw = small ? 170 : 220, py = useTouch ? 50 : IH - 74;
+    panel(10, py, pw, 64);
+    text('HP', 20, py + 22, 11, '#a9b8a0');
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(44, py + 12, pw - 54, 12);
     ctx.fillStyle = me.hp > 50 ? '#6bdc6b' : me.hp > 25 ? '#f6c453' : '#ff5a5a';
-    ctx.fillRect(44, IH - 62, (pw - 54) * clamp(me.hp / me.max, 0, 1), 12);
-    ctx.fillStyle = WCOL[me.w]; rrect(20, IH - 42, 10, 10, 3); ctx.fill();
-    text(WNAME[me.w] + (me.ammo >= 0 ? '  ' + me.ammo : '  ∞'), 36, IH - 32, 14, '#fff');
+    ctx.fillRect(44, py + 12, (pw - 54) * clamp(me.hp / me.max, 0, 1), 12);
+    ctx.fillStyle = WCOL[me.w]; rrect(20, py + 32, 10, 10, 3); ctx.fill();
+    text(WNAME[me.w] + (me.ammo >= 0 ? '  ' + me.ammo : '  ∞'), 36, py + 42, 14, '#fff');
     const mp = latest.PL.find(p => p[0] === myId);
-    if (mp) text(`K ${mp[3]} · M ${mp[4]}`, pw, IH - 32, 11, '#a9b8a0', 'right', 700);
+    if (mp) text(`K ${mp[3]} · M ${mp[4]}`, pw, py + 42, 11, '#a9b8a0', 'right', 700);
   }
 
   // petunjuk kontekstual
@@ -1504,11 +1824,11 @@ function drawHUD(S, me, dt) {
     const enemyPad = map.bases.some((o, t) => t !== myTeam && latest.pad[t] > 0 && Math.hypot(me.x - o.pad.x, me.y - o.pad.y) < 72);
     // kendaraan kosong milik tim di dekat pemain
     const ride = me.kind === 0 && S.units.find(v => isVeh(v) && v.team === myTeam && !v.owner && Math.hypot(v.x - me.x, v.y - me.y) < 46);
-    if (me.carry) hint = dPad < 72 ? 'E  taruh peti di pad' : 'E  jatuhkan   ·   F / klik kanan  lempar   ·   bawa ke pad markasmu';
+    if (me.carry) hint = dPad < 72 ? 'E  taruh peti di petak yang dibidik   ·   R  buku resep' : 'E  jatuhkan   ·   F / klik kanan  lempar   ·   bawa ke pad markasmu';
     else if (dPad < 84 && padN > 0) {
       const want = latest.or ? latest.or[myTeam][3] : 0, plan = latest.or ? PLAN_NAME[latest.or[myTeam][0]] : '';
-      hint = !want ? `Q  rakit (${padN}/8)   ·   1 = senjata · 4 = Buddy · 8 = Turret / Tank / Jeep`
-        : padN >= want ? `Q  rakit ${plan} (${padN}/${want})`
+      const pr = latest.pr ? latest.pr[myTeam] : '';
+      hint = pr ? `Q  rakit ${pr} (${padN} peti)   ·   R  buku resep`
         : `Perintah: ${plan} — butuh ${want} peti (${padN}/${want})   ·   1 = otomatis`;
     }
     else if (isVeh(me)) hint = `E  keluar dari ${VNAME[me.kind]}`;

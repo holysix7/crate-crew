@@ -36,6 +36,8 @@ Di macOS, saat pertama kali jalan akan muncul dialog firewall *"Allow incoming c
 | E | angkat peti / taruh di pad / curi dari pad musuh / naik & turun kendaraan |
 | F / klik kanan | lempar peti (bisa mengenai musuh: *BONK!*) |
 | Q | rakit di pad sendiri |
+| R | buku resep pola susunan |
+| Enter / Shift+Enter | chat semua / chat tim (Tab di kolom chat = ganti, Esc = batal) |
 | Tab | papan skor |
 | M | suara on/off |
 | G | ganti kualitas grafis (Rendah → Sedang → Tinggi) |
@@ -61,7 +63,29 @@ Di macOS, saat pertama kali jalan akan muncul dialog firewall *"Allow incoming c
 
 **Ruang tunggu**: setelah memasukkan nama, semua pemain masuk ruang tunggu (klik kolom tim untuk pindah tim). Ronde baru dimulai (hitung mundur 3 detik) saat **semua** pemain menekan **SIAP**; batal siap menghentikan hitung mundur. Setiap tim mulai **tanpa Buddy** — hanya pemainnya. Opsi *Isi tim kosong dengan CPU* (bawaan aktif): tim tanpa pemain mendapat 1 komandan CPU yang mengumpulkan peti & merakit, dan muncul lagi bila tewas; bila dimatikan, tim kosong langsung gugur (butuh pemain di minimal 2 tim). Selesai ronde, semua kembali ke ruang tunggu.
 
-**Resep pad (2×2, maks 2 tingkat = 8 peti):** 1 peti → senjata acak (SMG/Shotgun/Bazooka) · 4 peti → Buddy (bot) baru · 8 peti → Turret, Tank, atau Jeep.
+**Room master** 👑: pemain pertama yang masuk. Hanya room master yang memilih peta dan mengatur opsi CPU; di ruang tunggu ia melihat tombol ✕ (keluarkan pemain) dan 👑 (serahkan master) di samping nama pemain lain. Bisa juga lewat chat: `/kick nama`, `/master nama` (nama boleh awalan saja). Bila room master keluar, jabatan pindah ke pemain yang paling lama di ruangan.
+
+**Chat** ala Dota: tekan **Enter** untuk chat ke semua, **Shift+Enter** untuk chat tim (Tab di kolom chat = ganti Semua/Tim, Esc = batal). Pesan muncul di kiri bawah lalu memudar; jalan di ruang tunggu dan saat main. Maks 5 pesan per 5 detik.
+
+**Resep pola susunan (pad 2×2, maks 2 tingkat = 8 peti)** — tekan **R** di game untuk buku resep. Saat menaruh peti (**E**), peti masuk ke petak yang **dibidik** (bayangan peti transparan menunjukkan tempatnya); petak yang sudah terisi ditumpuk jadi tingkat 2. Lalu **Q** untuk merakit:
+
+| Pola | Hasil |
+|---|---|
+| 1 peti | senjata acak (SMG / Shotgun / Bazooka) |
+| 2 peti berjajar kiri–kanan | **Sniper** (60 dmg, jarak jauh, 8 peluru) |
+| 2 peti atas–bawah | **Pelontar api** (jarak dekat, sangat deras) |
+| 2 peti diagonal | **Pelontar granat** (ledakan area) |
+| 1 peti ditumpuk 1 (menara) | **Laser** (menembus beberapa musuh) |
+| 3 peti bentuk L | **Minigun** (200 peluru) |
+| 4 peti rata | **Buddy** (bot) baru |
+| 4 rata + 1 di atas | **Buddy Elit** (HP 160, helm emas, senjata khusus) |
+| 8 peti (2 tingkat penuh) | Turret, Tank, atau Jeep |
+
+Susunan yang tidak cocok resep: ≥4 peti → Buddy, selain itu → senjata acak dari 1 peti teratas. Perintah *Senjata* tetap memakai pola bila cocok; perintah Buddy/Turret/Tank/Jeep mengabaikan pola. Bot mengisi petak berurutan (berjajar → L → rata), jadi kadang ikut merakit Sniper/Minigun.
+
+**HP / tablet** (layar sentuh, terdeteksi otomatis): stik kiri = gerak, stik kanan = bidik (didorong jauh = menembak; tanpa stik kanan pemain menghadap arah jalan). Tombol **E / F / Q** di kanan, menu atas: Perintah, Resep, Skor, Chat, layar penuh. Main dalam posisi *landscape*.
+
+**Gamepad** (Gamepad API, USB/Bluetooth, juga ke HP): stik kiri gerak, stik kanan bidik, RT/RB tembak, A angkat/taruh, B lempar, X rakit, Y buku resep, Back (tahan) skor, D-pad kiri/kanan ganti rakitan, D-pad atas/bawah ganti perintah pasukan, Start = siap di ruang tunggu.
 
 **Perintah tim** (panel di kiri layar, bisa diklik atau pakai tombol angka; berlaku untuk satu tim, siapa pun di tim boleh mengubah):
 * *Rakit di pad*: **Otomatis** = perilaku lama (bot merakit Buddy begitu ada 4 peti). **Senjata / Buddy / Turret** = bot menunggu sampai jumlah peti cukup lalu merakit itu saja; tombol **Q** juga mengikuti perintah ini. Bila batas Turret (3) atau unit (8) sudah penuh, otomatis kembali ke mode Otomatis.
@@ -154,11 +178,12 @@ Ghidra 12.1.x + JDK 21 diperlukan untuk analisis native (`brew install --cask te
 ## Roadmap ide
 
 - [x] Kendaraan (tank/jeep) dari 8 peti — sekarang dipilih lewat perintah rakit
-- [ ] Resep berdasarkan pola susunan peti (seperti game aslinya), bukan hanya perintah
-- [ ] Lebih banyak senjata & resep pola susunan (bukan hanya jumlah)
+- [x] Resep berdasarkan pola susunan peti (seperti game aslinya), bukan hanya perintah
+- [x] Lebih banyak senjata (Sniper, Pelontar api, Pelontar granat, Minigun, Laser) & Buddy Elit
+- [x] Room master (pilih peta, CPU, keluarkan pemain) & chat semua/tim
 - [x] Beberapa peta (bukit, lubang, monster penjaga, event acak)
 - [ ] Editor peta sederhana
-- [ ] Kontrol gamepad (Gamepad API) & sentuh untuk HP
+- [x] Kontrol gamepad (Gamepad API) & sentuh untuk HP
 - [ ] Mode Capture-the-crate / Deathmatch
 - [x] Ekstraktor `.TIM → PNG` untuk riset referensi (lokal saja) — `tools/psx/tim2png.py`
 - [ ] Tentukan alamat muat overlay (`GAME.BIN` dll.) agar bisa dianalisis REA/Ghidra
