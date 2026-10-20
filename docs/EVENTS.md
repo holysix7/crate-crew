@@ -32,6 +32,8 @@ Senjata yang sedang dipakai **tidak diganti otomatis**, termasuk bila hasil undi
 
 Pengemudi mendapat satu kiriman di depan kendaraan, bukan dua kiriman untuk kendaraan dan badan. Pemain yang menunggu respawn mendapat kiriman di dekat spawn timnya. Pemain LORD juga mendapat pickup di tanah, tetapi tetap tidak bisa mengambilnya selama buff aktif. Penanda hijau dan pengumuman berlangsung 7 detik; loot yang belum diambil tetap tinggal setelah event selesai.
 
+Penerima kiriman melihat popup logo BGN **BANSOS MBG CAIR!** beserta nama senjata. Saat pickup MBG diambil (termasuk oleh pemain lain), pengambil melihat **BANSOS DITERIMA!** selama 3 detik. Popup tidak menghalangi kontrol dan hilang saat ronde berakhir atau koneksi putus. Logo disimpan lokal dan baru dimuat saat warning MBG, sehingga tidak menambah unduhan awal.
+
 ## UFO penculik
 
 Sorotan mengunci posisi satu pemain yang sedang berjalan kaki. Jika tidak ada pemain yang cocok, UFO dapat memilih bot. LORD tidak dapat diculik.

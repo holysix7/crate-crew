@@ -3,7 +3,7 @@
 Game web multiplayer lokal yang meniru *loop* inti **Team Buddies** (PS1, 2000):
 peti jatuh dari langit → angkat & bawa ke pad markas → susun → rakit senjata / pasukan / turret → hancurkan markas musuh.
 
-Semua aset (grafis & suara) dibuat sendiri (digambar lewat kode & disintesis), **tanpa file dari disk asli**, jadi proyek ini aman disimpan di GitHub dan dibagikan ke teman.
+Model 3D, tekstur permainan, dan suara dibuat lewat kode & sintesis, **tanpa file dari disk game asli**. Popup Bansos MBG memakai logo BGN yang disimpan lokal; [sumber aset](public/assets/README.md).
 
 **Patch notes Chaos & Loot (20 Oktober 2026)** tersedia dari kartu **Chaos & Loot** di dashboard/lobby, tombol **Patch notes** di panel perintah saat bermain, atau **Update** di menu sentuh. Panel mencakup seluruh event baru, loot monster, peti metal, dan aturan LORD. Panduan detail: [Event & loot](docs/EVENTS.md).
 

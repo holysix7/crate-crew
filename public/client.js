@@ -134,6 +134,7 @@ let aimMode = 'mouse', cursor = null;
 let kicked = '';
 let fps = 0, fpsN = 0, fpsT = 0, fpsLast = performance.now();
 let actionTipTimer;
+let mbgToastTimer;
 let banner = null; // pengumuman event besar di tengah atas layar
 renderQualityButtons();
 applyShadows();
@@ -188,6 +189,7 @@ ws.onclose = () => {
   $('join').disabled = true; joined = false;
   closeChat(); updateRoom(); updateOrders(); updateTouch();
   $('arena-status').hidden = true;
+  hideMbgToast();
 };
 ws.onmessage = e => {
   const m = JSON.parse(e.data);
@@ -372,6 +374,7 @@ function onSnap(m) {
   // reset bila jam server mundur (server restart)
   if (latest && m.tm < latest.tm) snaps.splice(0, snaps.length - 1);
   latest = m;
+  if (m.st !== 'playing') hideMbgToast();
   updateArenaStatus(m.A);
   const me = m.PL.find(p => p[0] === myId);
   if (me) myTeam = me[2];
@@ -397,11 +400,29 @@ function onSnap(m) {
 
 // Peringatan tetap terlihat sepanjang event, termasuk pemain yang baru tersambung.
 let arenaStatusKey = '';
+function prepareMbgLogo() {
+  const img = $('mbg-logo');
+  if (!img.getAttribute('src')) img.src = 'assets/mbg-logo.png';
+}
+function hideMbgToast() { clearTimeout(mbgToastTimer); $('mbg-toast').hidden = true; }
+function showMbgToast(e) {
+  if (e.p !== myId || !joined || latest.st !== 'playing') return;
+  prepareMbgLogo();
+  $('mbg-toast-title').textContent = e.stage === 'received' ? 'BANSOS DITERIMA!' : 'BANSOS MBG CAIR!';
+  const index = meta.weapons.indexOf(e.w);
+  $('mbg-toast-weapon').textContent = index >= 0 ? WNAME[index] : 'Senjata acak';
+  $('mbg-toast-hint').textContent = e.stage === 'received' ? 'Amunisi penuh. Gaskeun!' : 'Senjata di tanah · dekati / E untuk ambil';
+  const box = $('mbg-toast');
+  box.hidden = false;
+  clearTimeout(mbgToastTimer); mbgToastTimer = setTimeout(hideMbgToast, 3000);
+  if (e.stage === 'received') { tone(660, 0.08, 0.06, 'sine'); tone(990, 0.12, 0.06, 'sine', 0, 0.09); }
+}
 function updateArenaStatus(e) {
   const box = $('arena-status');
   const visible = !!e && latest.st === 'playing' && joined;
   box.hidden = !visible;
   if (!visible) { arenaStatusKey = ''; return; }
+  if (e.kind === 'mbg') prepareMbgLogo();
   const warning = e.age < e.warn;
   const seconds = Math.max(0, Math.ceil(warning ? e.warn - e.age : e.warn + e.duration - e.age));
   const key = [e.id, warning, seconds].join(':');
@@ -504,6 +525,7 @@ function onEvent(e) {
       if (e.t === myTeam) sfx.build();
       break;
     case 'shatter': burst(e.x, e.y, 15, 16, '#b9d4df', 160, 0.55, 4, 80); sfx.bonk(near(e.x, e.y)); break;
+    case 'mbg': showMbgToast(e); break;
     case 'trainhit': burst(e.x, e.y, 18, 20, '#ffb25d', 190, 0.7, 5, 100); sfx.bonk(near(e.x, e.y)); shake = Math.max(shake, 7 * near(e.x, e.y)); break;
     case 'slash': burst(e.x + Math.cos(e.a) * e.r * 0.6, e.y + Math.sin(e.a) * e.r * 0.6, 30, 16, '#8cffff', 180, 0.3, 4, 80); sfx.shot(near(e.x, e.y)); break;
     case 'claim': pushFeed(`<b style="color:${tcol(e.t)}">${esc(e.n)}</b> merebut airdrop: Super Bazooka + Tank!`); if (e.t === myTeam) sfx.build(); break;

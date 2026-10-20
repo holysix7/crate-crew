@@ -34,3 +34,13 @@ Fresh captures from the same browser setup. Train screenshots use a route chosen
 | [Bansos MBG](mbg.jpg) | Weapon gift in front of the player while the existing weapon remains equipped |
 
 [Measured performance results](../PERFORMANCE.md) include asset transfer and repeated-pickup resource counts.
+
+## MBG logo popup
+
+| Capture | What it shows |
+|---|---|
+| [Delivery badge](mbg-logo-delivery.jpg) | BGN emblem, BANSOS MBG CAIR!, and the delivered weapon; equipped weapon stays intact |
+| [Pickup badge](mbg-logo-received.jpg) | BANSOS DITERIMA! after ordinary keyboard movement and E to collect the gift |
+| [Compact badge](mbg-logo-mobile.jpg) | The smaller badge at 844 × 390, with gameplay controls remaining active |
+
+Verified that the PNG is not requested on initial load, loads once during MBG warning, and is reused for both notifications. Notices are filtered to their recipient, dismiss after three seconds, and clear when the round resets.

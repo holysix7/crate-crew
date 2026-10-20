@@ -70,11 +70,11 @@ class Encounters {
     }
     // Players awaiting respawn get their delivery beside their own spawn.
     for (const player of g.players.values()) if (!covered.has(player.id) && g.alive[player.team]) {
-      recipients.push({ unit: { ...g.bases[player.team].spawn, a: 0 }, recipient: null });
+      recipients.push({ unit: { ...g.bases[player.team].spawn, a: 0 }, recipient: { owner: player.id } });
     }
     const guns = ['smg', 'shotgun', 'bazooka', 'sniper', 'flamer', 'grenade', 'minigun', 'laser'];
     e.gifts = [];
-    for (const { unit } of recipients) {
+    for (const { unit, recipient } of recipients) {
       let spot = null;
       for (const radius of [52, 72, 100]) {
         for (const turn of [0, Math.PI / 4, -Math.PI / 4, Math.PI / 2, -Math.PI / 2, Math.PI]) {
@@ -86,9 +86,16 @@ class Encounters {
       if (!spot) spot = this.safeSpot(unit.x, unit.y, 200, 12);
       if (!spot) continue;
       const gift = this.dropWeapon(spot.x, spot.y, guns[Math.floor(Math.random() * guns.length)], 45, true);
-      if (gift) e.gifts.push([gift.id, gift.x, gift.y]);
+      if (gift) {
+        e.gifts.push([gift.id, gift.x, gift.y]);
+        if (recipient.owner) g.events.push({ k: 'mbg', p: recipient.owner, stage: 'delivered', w: gift.w });
+      }
     }
     g.events.push({ k: 'evt', name: 'BANSOS MBG DIBAGIKAN!', d: `${e.gifts.length} senjata acak di depan pemain. Senjata lama tetap di tangan; tekan E untuk menukar.` });
+  }
+
+  notifyMbgPickup(unit, pickup) {
+    if (pickup.special && unit.owner) this.game.events.push({ k: 'mbg', p: unit.owner, stage: 'received', w: pickup.w });
   }
 
   spawnDrop(e) {

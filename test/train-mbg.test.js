@@ -83,6 +83,9 @@ test('MBG drops one random gun per human, bot, driver, and respawning player wit
   g.arenaEvents.tick(e.warn - 0.01); assert.equal(g.pickups.size, 0);
   g.arenaEvents.tick(0.02);
   assert.equal(g.pickups.size, 5); assert.equal(e.gifts.length, 5);
+  const notices = g.events.filter(ev => ev.k === 'mbg' && ev.stage === 'delivered');
+  assert.equal(notices.length, 4);
+  assert.deepEqual(new Set(notices.map(ev => ev.p)), new Set([a.owner, b.owner, c.owner, respawn.owner]));
   assert.equal(a.weapon, 'laser'); assert.equal(a.ammo, 7); assert.equal(b.weapon, 'lordblade'); assert.equal(c.weapon, 'pistol');
   for (const gift of g.pickups.values()) {
     assert.ok(!['pistol', 'tank', 'jeep', 'lordblade', 'superbazooka'].includes(gift.w));
@@ -100,10 +103,25 @@ test('MBG pickups can be swapped, stay after the announcement, then expire norma
   g.arenaEvents.tick(e.warn + 0.01);
   const gift = [...g.pickups.values()][0]; u.x = gift.x; u.y = gift.y; g.grab(u);
   assert.equal(u.weapon, gift.w); assert.equal([...g.pickups.values()][0].ammo, 23);
+  assert.ok(g.events.some(ev => ev.k === 'mbg' && ev.p === u.owner && ev.stage === 'received' && ev.w === gift.w));
   g.arenaEvents.finish(); assert.equal(g.pickups.size, 1);
   g.encounters.spawnMbg({}); assert.equal(g.pickups.size, 2);
   for (let i = 0; i < 1400; i++) g.tick();
   assert.equal(g.pickups.size, 0);
+});
+
+test('MBG automatic pickup notifies the collector once; ordinary pickups never show the MBG badge', () => {
+  const { g, e } = arena('mbg'), u = human(g, 0);
+  g.arenaEvents.tick(e.warn + 0.01);
+  const gift = [...g.pickups.values()][0], received = [];
+  g.events = [];
+  g.conns.add({ backlog: 0, send: s => received.push(...JSON.parse(s).ev) });
+  u.x = gift.x; u.y = gift.y; g.tick(); g.tick();
+  const notices = received.filter(ev => ev.k === 'mbg');
+  assert.equal(notices.length, 1);
+  assert.deepEqual(notices[0], { k: 'mbg', p: u.owner, stage: 'received', w: gift.w });
+  g.encounters.dropWeapon(u.x, u.y, 'smg'); g.grab(u); g.broadcast();
+  assert.equal(received.filter(ev => ev.k === 'mbg').length, 1);
 });
 
 test('train and MBG finish on all maps/team counts and work in the preview queue', () => {
