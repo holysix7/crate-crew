@@ -19,3 +19,28 @@ Captured from the running game in Chrome at 1280 × 900, low graphics. Event tim
 | [Metal crate](metal.jpg) | Carried metal crate before throwing and splitting |
 
 For normal play and reproducible event previews, see [the event guide](../EVENTS.md#preview-dan-tes). The Node tests cover event mechanics across all three maps and both two- and four-team games. Browser checks also exercised UFO rescue, movement to claim an airdrop, throwing metal into two wooden crates, LORD transformation, desktop/mobile patch notes, Escape/close, and suppression of movement/fire while notes are open.
+
+## Train, MBG, and performance update
+
+Fresh captures from the same browser setup. Train screenshots use a route chosen by the game; event timing is held briefly to show the complete warning and train. MBG shows an existing Laser with seven shots still equipped alongside the new pickup.
+
+| Capture | What it shows |
+|---|---|
+| [Updated dashboard](dashboard-train-mbg.jpg) | Nine events, including train and MBG |
+| [New event notes](patch-notes-train-mbg.jpg) | Instant-death train and weapon delivery rules |
+| [Performance notes](patch-notes-performance.jpg) | Loading/rendering improvements in player-facing notes |
+| [Train warning](train-warning.jpg) | Curved red route and six-second warning |
+| [Train](train.jpg) | Locomotive and wagons on the curved rails |
+| [Bansos MBG](mbg.jpg) | Weapon gift in front of the player while the existing weapon remains equipped |
+
+[Measured performance results](../PERFORMANCE.md) include asset transfer and repeated-pickup resource counts.
+
+## MBG logo popup
+
+| Capture | What it shows |
+|---|---|
+| [Delivery badge](mbg-logo-delivery.jpg) | BGN emblem, BANSOS MBG CAIR!, and the delivered weapon; equipped weapon stays intact |
+| [Pickup badge](mbg-logo-received.jpg) | BANSOS DITERIMA! after ordinary keyboard movement and E to collect the gift |
+| [Compact badge](mbg-logo-mobile.jpg) | The smaller badge at 844 × 390, with gameplay controls remaining active |
+
+Verified that the PNG is not requested on initial load, loads once during MBG warning, and is reused for both notifications. Notices are filtered to their recipient, dismiss after three seconds, and clear when the round resets.

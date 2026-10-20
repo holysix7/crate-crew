@@ -1,4 +1,5 @@
 'use strict';
+const { planTrain, tickTrain, trainEscape } = require('./train');
 
 // Semua efek dihitung server. Client hanya menerima geometri dan jam event.
 const EVENT_RULES = {
@@ -9,6 +10,8 @@ const EVENT_RULES = {
   airdrop: { name: 'Helikopter Airdrop', warn: 5, duration: 14, hint: 'Rebut peti/tank abu-abu: Super Bazooka + tank untuk tim pertama!', reward: 'Airdrop masih bisa diklaim sampai batas waktunya habis.' },
   chickens: { name: 'Invasi Ayam', warn: 4, duration: 25, hint: 'Ayam mencuri peti lepas! Kejar atau tembak untuk merebut loot.', reward: 'Ayam kabur; peti yang dibawanya tertinggal.' },
   lord: { name: 'LORD', warn: 6, duration: 18, hint: 'Boss melee netral! Pembunuhnya menjadi LORD sampai mati.', reward: 'Boss LORD berkeliaran sampai dikalahkan. Buff pemain hilang saat mati.' },
+  train: { name: 'Kereta Ngepot', warn: 6, duration: 9, hint: 'MENJAUH DARI REL MERAH! Lokomotif dan gerbong menabrak = langsung tewas.', reward: 'Kereta lewat. Jalur aman kembali.' },
+  mbg: { name: 'Bansos MBG', warn: 4, duration: 7, hint: 'Senjata acak dibagikan di depan setiap pemain. Dekati atau tekan E untuk mengambil!', reward: 'Bansos dibagikan! Senjata yang belum diambil bertahan 45 detik sejak dibagikan.' },
 };
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const rand = (lo, hi) => lo + Math.random() * (hi - lo);
@@ -23,7 +26,8 @@ class ArenaEvents {
     const { w, h, tile } = g.mapInfo();
     const e = { id: g.id(), kind, age: 0, warn: rule.warn, duration: rule.duration || 0, x: w / 2, y: h / 2,
       dx: 1, dy: 0, radius: 250, width: 90, length: 0, speed: 0, started: false, drops: 0, hit: new Set() };
-    if (kind === 'ufo') {
+    if (kind === 'train') planTrain(g, e);
+    else if (kind === 'ufo') {
       const candidates = [...g.units.values()].filter(u => !u.lord && !u.abducted && u.team >= 0 && u.kind === 'human');
       if (!candidates.length) candidates.push(...[...g.units.values()].filter(u => u.kind === 'bot' && !u.lord));
       if (!candidates.length || !g.pits.length) return false;
@@ -95,7 +99,9 @@ class ArenaEvents {
       if (e.kind === 'ufo' && !g.encounters.spawnUfo(e)) { this.finish(); return; }
       if (e.kind === 'chickens') g.encounters.spawnChickens(e);
       if (e.kind === 'lord' && !g.encounters.spawnLord(e)) { this.finish(); return; }
+      if (e.kind === 'mbg') g.encounters.spawnMbg(e);
     }
+    if (e.kind === 'train') tickTrain(g, e, Math.min(t, e.duration), Math.min(dt, Math.max(0, e.duration - (t - dt))));
     if (t >= e.duration) { this.finish(); return; }
     if (e.kind === 'blackhole') this.blackhole(e, dt);
     else if (e.kind === 'dragon') this.dragon(e, t, dt);
@@ -230,7 +236,8 @@ class ArenaEvents {
     const e = this.active, g = this.game;
     if (!e || u.kind === 'turret' || u.kind === 'monster' || u.abducted || u.neutral) return null;
     let target = null;
-    if (e.kind === 'blackhole') {
+    if (e.kind === 'train') target = trainEscape(e, u);
+    else if (e.kind === 'blackhole') {
       const dx = u.x - e.x, dy = u.y - e.y, d = Math.hypot(dx, dy);
       if (d < e.radius + 55) {
         const a = d ? Math.atan2(dy, dx) : u.a;
@@ -270,7 +277,9 @@ class ArenaEvents {
     const { id, kind, age, warn, duration, x, y, dx, dy, radius, width, length, speed } = e;
     const ship = this.game.units.get(e.ufo);
     return { id, kind, age: +age.toFixed(3), warn, duration, x, y, dx, dy, radius, width, length, speed,
-      target: e.target, stage: e.stage, captive: e.captive, shipX: ship?.x, shipY: ship?.y, pitX: e.pitX, pitY: e.pitY, boss: e.boss, delivered: !!e.delivered };
+      target: e.target, stage: e.stage, captive: e.captive, shipX: ship?.x, shipY: ship?.y, pitX: e.pitX, pitY: e.pitY, boss: e.boss, delivered: !!e.delivered,
+      ...(e.kind === 'train' ? { swerve: e.swerve, phase: e.phase, cars: e.cars, spacing: e.spacing } : {}),
+      ...(e.kind === 'mbg' ? { gifts: e.gifts || [] } : {}) };
   }
 }
 

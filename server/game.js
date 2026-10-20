@@ -537,7 +537,7 @@ class Game {
     for (const pk of this.pickups.values()) if (Math.hypot(pk.x - u.x, pk.y - u.y) < 27) {
       this.pickups.delete(pk.id);
       if (u.weapon !== 'pistol') { const old = this.encounters.dropWeapon(u.x + 32, u.y, u.weapon, 20); if (old) old.ammo = u.ammo; }
-      u.weapon = pk.w; u.ammo = pk.ammo; return;
+      u.weapon = pk.w; u.ammo = pk.ammo; this.encounters.notifyMbgPickup(u, pk); return;
     }
     // ambil peti di tanah terdekat
     let best = null, bd = 44;
@@ -1124,7 +1124,7 @@ class Game {
       if (u.in.fire && !u.carry && u.cd <= 0) this.fire(u);
       if (isInf(u) && !u.lord && u.weapon === 'pistol') {
         for (const pk of this.pickups.values()) {
-          if (Math.hypot(pk.x - u.x, pk.y - u.y) < 26) { u.weapon = pk.w; u.ammo = pk.ammo; this.pickups.delete(pk.id); break; }
+          if (Math.hypot(pk.x - u.x, pk.y - u.y) < 26) { u.weapon = pk.w; u.ammo = pk.ammo; this.pickups.delete(pk.id); this.encounters.notifyMbgPickup(u, pk); break; }
         }
       }
     }

@@ -2,12 +2,12 @@
 // Crate Crew — server LAN tanpa dependensi (cukup Node.js 18+).
 // Jalankan:  node server.js      (opsional: PORT=8080 TEAMS=2..4)
 const http = require('http');
-const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { Game } = require('./server/game');
 const { EVENT_RULES } = require('./server/arena-events');
+const { createStaticHandler } = require('./server/static-files');
 const PREVIEW_EVENTS = (process.env.EVENT_PREVIEW || '').split(',').map(s => s.trim()).filter(Boolean);
 if (PREVIEW_EVENTS.some(k => !Object.hasOwn(EVENT_RULES, k))) {
   throw new Error('EVENT_PREVIEW harus salah satu: ' + Object.keys(EVENT_RULES).join(', '));
@@ -16,24 +16,7 @@ if (PREVIEW_EVENTS.some(k => !Object.hasOwn(EVENT_RULES, k))) {
 const PORT = +process.env.PORT || 8080;
 const TEAMS = Math.max(2, Math.min(4, +process.env.TEAMS || 2));
 const PUB = path.join(__dirname, 'public');
-const MIME = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.json': 'application/json',
-  '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
-};
-
-const server = http.createServer((req, res) => {
-  let p;
-  try { p = decodeURIComponent(req.url.split('?')[0]); } catch { res.writeHead(400); return res.end(); }
-  if (p === '/') p = '/index.html';
-  const fp = path.normalize(path.join(PUB, p));
-  if (!fp.startsWith(PUB)) { res.writeHead(403); return res.end(); }
-  fs.readFile(fp, (err, data) => {
-    if (err) { res.writeHead(404); return res.end('not found'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(fp)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
-    res.end(data);
-  });
-});
+const server = http.createServer(createStaticHandler(PUB));
 
 // ---- WebSocket minimal (RFC 6455, text frame saja) ----
 class WSConn {

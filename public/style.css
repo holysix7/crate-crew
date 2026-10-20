@@ -145,6 +145,22 @@ kbd { display: inline-block; padding: 1px 6px; border-radius: 5px; background: #
 .action-tip { position: fixed; z-index: 9; left: 50%; bottom: 90px; transform: translateX(-50%); max-width: min(520px, 90vw); background: #152a31; color: #c9f7ff; border: 1px solid #7acddd; padding: 10px 16px; border-radius: 9px; text-align: center; pointer-events: none; font-size: 13px; }
 .action-tip[hidden] { display: none; }
 
+.mbg-toast { position: fixed; z-index: 8; bottom: max(102px, calc(env(safe-area-inset-bottom) + 86px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; width: min(410px, calc(100vw - 32px)); padding: 12px 18px 12px 12px; border: 2px solid #d1b06c; border-radius: 16px; background: linear-gradient(115deg, #071e49f5, #102b39f5); box-shadow: 0 6px 28px #0006, 0 0 20px #d1b06c26; pointer-events: none; animation: mbg-arrive .25s ease-out; }
+.mbg-toast[hidden] { display: none; }
+.mbg-toast img { flex: none; width: 96px; height: 96px; object-fit: contain; filter: drop-shadow(0 2px 6px #0006); }
+.mbg-toast div { min-width: 0; }
+.mbg-toast small { display: block; color: #d7be7b; font-size: 11px; font-weight: 900; letter-spacing: .06em; }
+.mbg-toast strong { display: block; color: #fff4c7; font-size: 23px; line-height: 1.2; margin: 5px 0; overflow-wrap: anywhere; }
+.mbg-toast span { display: block; color: #b5e0ea; font-size: 11px; line-height: 1.4; }
+@keyframes mbg-arrive { from { opacity: 0; translate: 0 12px; } to { opacity: 1; translate: 0 0; } }
+@media (max-width: 600px), (max-height: 500px) {
+  .mbg-toast { gap: 10px; width: min(340px, calc(100vw - 24px)); padding: 10px 12px; bottom: max(82px, calc(env(safe-area-inset-bottom) + 72px)); }
+  .mbg-toast img { width: 64px; height: 64px; }
+  .mbg-toast strong { font-size: 19px; }
+  .mbg-toast small { font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .mbg-toast { animation: none; } }
+
 /* Catatan rilis bisa dibaca dari dashboard maupun saat bermain. */
 .patch-launch { display: grid; gap: 4px; width: 100%; padding: 13px 14px; text-align: left; font: inherit; color: #f3f1e8; background: linear-gradient(120deg, #253e37, #162c29); border: 1px solid #79b3a1; border-radius: 10px; cursor: pointer; }
 .patch-launch:hover { border-color: #f6c453; background: #2b4438; }

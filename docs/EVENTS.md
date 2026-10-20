@@ -11,8 +11,28 @@ Event pertama normalnya terjadi 40–55 detik setelah ronde dimulai, lalu undian
 | Helikopter / `airdrop` | 5 dtk | Berlomba menyentuh peti/tank abu-abu setelah mendarat. |
 | Invasi ayam / `chickens` | 4 dtk | Kejar ayam pencuri peti, atau tembak untuk merebut loot. |
 | LORD / `lord` | 6 dtk | Kalahkan boss melee untuk memperoleh wujud LORD sampai mati. |
+| Kereta Ngepot / `train` | 6 dtk | Menjauh dari seluruh rel melengkung; lokomotif dan gerbong menyebabkan kematian instan. |
+| Bansos MBG / `mbg` | 4 dtk | Satu pickup senjata acak di depan setiap pemain/bot; ambil atau tukar dengan E. |
 
 Hujan meteor, kiriman peti, dan monster mengamuk juga tetap ada dalam rotasi. Semua aturan, klaim loot, damage, dan jam event dihitung server.
+
+## Kereta Ngepot
+
+Setelah peringatan 6 detik, lokomotif dan dua gerbong melintasi arena selama 9 detik. Rel merah memperlihatkan seluruh jalur melengkung sebelum kereta datang; jalur yang sama dipakai untuk visual, minimap, dan tabrakan di server. Bot mencoba menyingkir dari rel.
+
+Tabrakan lokomotif **atau gerbong** langsung membunuh unit di tanah dari tim mana pun. HP besar, buff LORD, dan perisai spawn tidak menahan tabrakan. Kendaraan yang tertabrak hancur bersama pengemudinya. Pemeriksaan lintasan antar-tick mencegah kereta cepat menembus pemain. Korban respawn memakai aturan biasa.
+
+Kereta tidak merusak HQ atau peti di pad. UFO dan korban yang sedang diangkat berada di udara sehingga tidak tertabrak; tank airdrop yang masih netral tetap terlindungi. Boss LORD yang tertabrak tidak memberi buff karena tidak ada pemain yang membunuhnya.
+
+## Bansos MBG
+
+Setelah peringatan 4 detik, setiap pemain dan bot dari tim yang masih hidup mendapat satu **pickup senjata acak di depannya**. Pool: SMG, Shotgun, Bazooka, Sniper, Pelontar api, Pelontar granat, Minigun, dan Laser, dengan amunisi penuh. Tidak termasuk Super Bazooka eksklusif helikopter atau senjata LORD.
+
+Senjata yang sedang dipakai **tidak diganti otomatis**, termasuk bila hasil undian sama. Pengguna pistol bisa mengambil pickup dengan mendekat; tekan E untuk menukar senjata yang masih berisi. Pickup muncul sekitar 52 unit di depan, bergeser ke tempat aman bila ada tembok/lubang, dan bertahan 45 detik sejak dibagikan. Siapa pun boleh mengambilnya.
+
+Pengemudi mendapat satu kiriman di depan kendaraan, bukan dua kiriman untuk kendaraan dan badan. Pemain yang menunggu respawn mendapat kiriman di dekat spawn timnya. Pemain LORD juga mendapat pickup di tanah, tetapi tetap tidak bisa mengambilnya selama buff aktif. Penanda hijau dan pengumuman berlangsung 7 detik; loot yang belum diambil tetap tinggal setelah event selesai.
+
+Penerima kiriman melihat popup logo BGN **BANSOS MBG CAIR!** beserta nama senjata. Saat pickup MBG diambil (termasuk oleh pemain lain), pengambil melihat **BANSOS DITERIMA!** selama 3 detik. Popup tidak menghalangi kontrol dan hilang saat ronde berakhir atau koneksi putus. Logo disimpan lokal dan baru dimuat saat warning MBG, sehingga tidak menambah unduhan awal.
 
 ## UFO penculik
 
@@ -53,6 +73,8 @@ Boss netral dengan zirah emas, tubuh besar, aura air biru, dan senjata melee. Ia
 
 Wujud pemain lebih kecil dan lebih lemah daripada boss. Arahkan bidikan lalu klik/tahan tombol tembak untuk menebas. Wujud ini tidak bisa mengangkat peti, merakit, mengambil senjata/airdrop, atau naik kendaraan. Pengemudi yang mengalahkan boss keluar dari kendaraan dan berubah di tempat.
 
+Boss LORD tidak merusak HQ. LORD pemain bisa menebas HQ musuh dengan 16 damage per serangan.
+
 **Buff hilang saat pemilik mati dan tidak berpindah ke pembunuhnya.** Pemain respawn sebagai Buddy biasa. Buff baru hanya diperoleh dari mengalahkan boss LORD yang muncul lagi. Jika boss mati karena lingkungan atau unit netral, tidak ada pemain yang mendapat buff.
 
 ## Peti dan loot monster
@@ -84,7 +106,7 @@ Ketiga bencana tidak memberi damage langsung ke HQ dan tidak mengubah peti di pa
 EVENT_PREVIEW=lord PORT=8087 node server.js
 
 # Beberapa event berurutan dengan jeda singkat, lalu kembali ke undian normal
-EVENT_PREVIEW=ufo,airdrop,chickens,lord PORT=8087 node server.js
+EVENT_PREVIEW=train,mbg,ufo,airdrop,chickens,lord PORT=8087 node server.js
 
 # Semua tes memakai Node bawaan, tanpa npm install
 node --test
