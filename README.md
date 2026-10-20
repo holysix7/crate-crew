@@ -93,7 +93,7 @@ Lobby menampilkan preview geometri keenam peta dengan posisi empat markas. **Sun
 
 Susunan yang tidak cocok resep: ≥4 peti → Buddy, selain itu → senjata acak dari 1 peti teratas. Perintah *Senjata* tetap memakai pola bila cocok; perintah Buddy/Turret/Tank/Jeep mengabaikan pola. Bot mengisi petak berurutan (berjajar → L → rata), jadi kadang ikut merakit Sniper/Minigun.
 
-**Friendly fire** (opsi room master di ruang tunggu, default mati): peluru, ledakan, peti lempar, tabrakan kendaraan, dan tebasan LORD ikut melukai satu tim (tidak pernah diri sendiri; teamkill tidak menambah skor). Pemain bisa **E** mengangkat unit infanteri terdekat (teman atau musuh; bukan yang berperisai spawn / LORD) lalu **F** melemparnya. Diangkat maksimal 5 detik dan kebal selama diangkat/terbang; mendarat −15 HP, menabrak unit lain −25 HP, mendarat di lubang = tewas.
+**Friendly fire** (opsi room master di ruang tunggu, default mati): peluru, ledakan, peti lempar, tabrakan kendaraan, dan tebasan LORD ikut melukai satu tim (tidak pernah diri sendiri; teamkill tidak menambah skor). Pemain bisa **E** mengangkat unit infanteri terdekat (teman atau musuh; bukan yang berperisai spawn / LORD / sedang membawa pemain lain) lalu **F** melemparnya. Diangkat maksimal 5 detik dan kebal selama diangkat/terbang; mendarat −15 HP, menabrak unit lain −25 HP, mendarat di lubang = tewas.
 
 **HP / tablet** (layar sentuh, terdeteksi otomatis): stik kiri = gerak, stik kanan = bidik (didorong jauh = menembak; tanpa stik kanan pemain menghadap arah jalan). Tombol **E / F / Q** di kanan, menu atas: Perintah, Resep, Skor, Chat, layar penuh. Main dalam posisi *landscape*.
 

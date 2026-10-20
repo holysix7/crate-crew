@@ -1999,7 +1999,7 @@ function drawHUD(S, me, dt) {
     // kendaraan kosong milik tim di dekat pemain
     const ride = me.kind === 0 && S.units.find(v => isVeh(v) && v.team === myTeam && !v.owner && Math.hypot(v.x - me.x, v.y - me.y) < 46);
     // unit lain yang bisa diangkat (friendly fire): infanteri bukan LORD/perisai/sedang diangkat, dalam jangkauan server (r + r + 8)
-    const grabbable = latest.lb && latest.lb[3] && me.kind === 0 && !me.carry && !me.holding && S.units.find(v => v.id !== me.id && v.kind <= 1 && !v.lord && !v.shield && !v.lift && Math.hypot(v.x - me.x, v.y - me.y) < 36);
+    const grabbable = latest.lb && latest.lb[3] && me.kind === 0 && !me.carry && !me.holding && S.units.find(v => v.id !== me.id && v.kind <= 1 && !v.lord && !v.holding && !v.shield && !v.lift && Math.hypot(v.x - me.x, v.y - me.y) < 36);
     if (me.st === 1) hint = 'Kamu sedang diangkat! Tunggu dilempar atau diturunkan.';
     else if (me.st === 2) hint = 'Terbang!';
     else if (me.lift) hint = 'DICULIK UFO! Temanmu bisa menembak piring terbang untuk menolong.';

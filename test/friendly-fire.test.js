@@ -15,7 +15,8 @@ function human(g, team = 0, x = 700, y = 600, a = 0) {
 }
 // pemain palsu dengan koneksi tiruan untuk uji pesan lobi
 function player(g, name) {
-  const sent = [], conn = { send: s => sent.push(s) };
+  const sent = [], conn = { backlog: 0, send: s => sent.push(s) };
+  g.conns.add(conn);
   const p = { id: g.id(), name, team: 0, unitId: 0, respawn: 0, kills: 0, deaths: 0, ready: true, input: { mx: 0, my: 0, a: 0, fire: false }, acts: [], conn };
   g.players.set(p.id, p); conn.player = p;
   return { p, conn, sent };
@@ -33,7 +34,8 @@ test('lobby: only the master toggles friendly fire, readiness resets, and lb[3] 
   g.onMsg(a.conn, { t: 'ff', v: true });
   assert.equal(g.ff, true); assert.equal(a.p.ready, false); assert.equal(b.p.ready, false);
   assert.equal(JSON.parse(g.snapshot()).lb[3], 1);
-  assert.ok(g.events.some(e => e.k === 'ff' && e.v === true));
+  g.broadcast(true);
+  assert.ok(a.sent.some(s => JSON.parse(s).ev?.some(e => e.k === 'ff' && e.v === true)));
 });
 
 test('bullets and splash only hurt teammates with friendly fire, never the owner', () => {
@@ -139,4 +141,51 @@ test('a moving vehicle rams teammates only with friendly fire', () => {
     g.tick();
     assert.equal(inf.hp < 100, ff);
   }
+});
+
+test('a thrown player never damages the thrower on landing', () => {
+  const g = arena(); g.ff = true;
+  const a = human(g, 0, 700, 600), v = human(g, 1, 722, 600);
+  g.grab(a); g.throwUnit(a);
+  Object.assign(v.flight, { vx: 0, vy: 0, vz: -1 });
+  v.x = a.x; v.y = a.y; v.lift = 1;
+  g.tickHeld(1 / 30);
+  assert.equal(a.hp, 100);
+  assert.equal(v.hp, 85);
+});
+
+test('a carrier cannot be picked up to form a nested carry chain', () => {
+  const g = arena(); g.ff = true;
+  const a = human(g, 0, 700, 600), v = human(g, 1, 722, 600);
+  g.grab(a);
+  const third = human(g, 0, 678, 600);
+  g.grab(third);
+  assert.ok(!third.holding);
+  assert.equal(a.holding, v.id);
+  assert.equal(v.heldBy, a.id);
+  assert.ok(!a.abducted);
+});
+
+test('disconnecting either carried player clears the carry relationship', () => {
+  for (const removeHolder of [false, true]) {
+    const g = arena(); g.ff = true;
+    const a = human(g, 0, 700, 600), v = human(g, 1, 722, 600);
+    const h = player(g, 'Holder'), victim = player(g, 'Victim');
+    a.owner = h.p.id; h.p.unitId = a.id; v.owner = victim.p.id; victim.p.unitId = v.id;
+    g.grab(a); g.removeConn(removeHolder ? h.conn : victim.conn);
+    const survivor = removeHolder ? v : a;
+    assert.ok(g.units.has(survivor.id));
+    assert.ok(!survivor.holding && !survivor.heldBy && !survivor.abducted);
+  }
+});
+
+test('friendly fire changes cancel countdown immediately and reject invalid or in-match changes', () => {
+  const g = new Game(2), a = player(g, 'Host'); g.master = a.p.id;
+  g.state = 'countdown'; g.countdown = 0.1;
+  g.onMsg(a.conn, { t: 'ff', v: 'true' });
+  assert.equal(g.ff, false); assert.equal(a.p.ready, true);
+  g.onMsg(a.conn, { t: 'ff', v: true });
+  assert.equal(g.state, 'lobby'); assert.equal(g.countdown, 0);
+  g.setMap(3); g.toLobby(); assert.equal(g.ff, true);
+  g.state = 'playing'; g.onMsg(a.conn, { t: 'ff', v: false }); assert.equal(g.ff, true);
 });

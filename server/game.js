@@ -419,9 +419,10 @@ class Game {
         this.cpu = !!m.v;
         for (const q of this.players.values()) q.ready = false; // aturan berubah → konfirmasi ulang
         this.events.push({ k: 'cpu', n: p.name, v: this.cpu });
-      } else if (m.t === 'ff' && !!m.v !== this.ff) {
-        this.ff = !!m.v;
+      } else if (m.t === 'ff' && typeof m.v === 'boolean' && m.v !== this.ff) {
+        this.ff = m.v;
         for (const q of this.players.values()) q.ready = false;
+        this.state = 'lobby'; this.countdown = 0;
         this.events.push({ k: 'ff', n: p.name, v: this.ff });
       }
     }
@@ -632,7 +633,7 @@ class Game {
     if (!this.ff || u.kind !== 'human' || u.carry || u.holding) return;
     let v = null, bd = Infinity;
     for (const o of this.units.values()) {
-      if (o.id === u.id || !isInf(o) || o.lord || o.abducted || o.shield > 0) continue;
+      if (o.id === u.id || !isInf(o) || o.lord || o.abducted || o.holding || o.shield > 0) continue;
       const d = dist(u, o) - o.r - u.r;
       if (d < 8 && d < bd) { bd = d; v = o; }
     }
@@ -681,7 +682,7 @@ class Game {
         this.eventMove(v, f.vx * dt, f.vy * dt, v.r);
         if (!f.hit && v.lift < 40) {
           for (const o of this.units.values()) {
-            if (o.id === v.id || o.team < 0 || o.fly || o.neutral || o.abducted || Math.hypot(o.x - v.x, o.y - v.y) >= o.r + v.r) continue;
+            if (o.id === v.id || o.id === f.by || o.team < 0 || o.fly || o.neutral || o.abducted || Math.hypot(o.x - v.x, o.y - v.y) >= o.r + v.r) continue;
             f.hit = true; f.vx *= -0.25; f.vy *= -0.25;
             this.events.push({ k: 'bonk', x: r1(o.x), y: r1(o.y) });
             this.damage(o, THROW_UNIT.hitDmg, f.by);
