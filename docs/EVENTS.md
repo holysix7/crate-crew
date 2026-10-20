@@ -16,6 +16,16 @@ Event pertama normalnya terjadi 40–55 detik setelah ronde dimulai, lalu undian
 
 Hujan meteor, kiriman peti, dan monster mengamuk juga tetap ada dalam rotasi. Semua aturan, klaim loot, damage, dan jam event dihitung server.
 
+## Pengaturan room master
+
+Di lobby, panel **Event acak** menyediakan sakelar utama dan pilihan untuk masing-masing 12 event: Meteor, Kiriman Peti, Monster Mengamuk, Blackhole, Naga, Tsunami, UFO, Helikopter, Ayam, LORD, Kereta Ngepot, dan Bansos MBG. Buka **Pilih event yang boleh muncul** untuk daftar lengkap.
+
+Hanya room master yang bisa mengubahnya, dan server menolak permintaan pemain lain. Semua pemain melihat pilihan yang sama. Perubahan membatalkan countdown serta status Siap semua pemain agar aturan baru disetujui sebelum mulai. Pengaturan tidak bisa diubah selama pertandingan.
+
+Sakelar utama mematikan semua undian event tanpa menghapus pilihan per event; nyalakan lagi untuk memakai pilihan yang sama. Menonaktifkan seluruh pilihan juga menghasilkan pertandingan tanpa event acak. Peti rutin dan monster penjaga tetap bagian dari permainan biasa.
+
+Pilihan bertahan saat ganti peta, ronde baru, master diserahkan, atau master keluar. Server baru mulai dengan semua event aktif. Event yang dimatikan tidak bisa dipilih undian maupun dipaksa lewat preview host; `EVENT_PREVIEW=train,mbg` melewati train bila train dimatikan. Bila semua preview dimatikan, permainan memakai interval normal untuk event yang masih aktif.
+
 ## Kereta Ngepot
 
 Setelah peringatan 6 detik, lokomotif dan dua gerbong melintasi arena selama 9 detik. Rel merah memperlihatkan seluruh jalur melengkung sebelum kereta datang; jalur yang sama dipakai untuk visual, minimap, dan tabrakan di server. Bot mencoba menyingkir dari rel.
@@ -113,3 +123,17 @@ node --test
 ```
 
 Masuk lobby dan tekan Siap seperti biasa. Tanpa `EVENT_PREVIEW`, server memakai undian normal. Preview hanya dipilih oleh host melalui environment; tidak ada pesan WebSocket pemain untuk memaksa event. Perintah preview berlaku lagi pada ronde berikutnya.
+
+
+## Kompatibilitas enam peta besar
+
+Semua event tersedia di Lembah Benteng, Ngarai Raksasa, Punggung Es, Sungai Kembar, Kota Reruntuhan, dan Kepulauan Vulkanik, untuk 2–4 tim. Geometri peta dicerminkan pada kedua sumbu. Pilihan event room master tetap tersimpan saat peta diganti.
+
+- **Tsunami:** panjang perjalanan mengikuti ukuran arena; bukit pelindung tersedia di setiap kuadran. Air sungai tidak menjadi tempat berlindung! Hadiah kayu/metal kembali dalam kelompok simetris pada tanah aman.
+- **Kereta:** pemilihan rel memeriksa tembok, markas, lubang, sungai, lava, dan jurang. Rel melewati koridor atau jembatan yang aman; tabrakan tetap mematikan.
+- **Blackhole, Naga, meteor:** posisi/panjang lintasan memakai ukuran arena. Blackhole tidak muncul di sungai atau jurang; hadiah Naga mencari tanah aman.
+- **UFO:** setiap peta tetap mempunyai lubang tujuan penculikan. UFO terbang melewati rintangan; korban yang berhasil dibebaskan dikembalikan ke tanah aman.
+- **Helikopter, ayam, LORD:** titik kedatangan dipilih di tengah yang dapat dicapai semua tim. Tank dan pickup menghindari kanal berbahaya; LORD memakai pathfinding yang sama untuk melewati jembatan.
+- **Bansos MBG dan kiriman peti:** senjata dan peti tidak ditaruh di dalam tembok, sungai, lava, atau jurang. Monster penjaga tetap ada di tengah dan bisa mengamuk.
+
+Lihat [panduan peta](MAPS.md) dan [screenshot](screenshots/README.md).

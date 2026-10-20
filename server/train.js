@@ -10,7 +10,7 @@ function trainPoint(e, distance) {
 
 function planTrain(game, event) {
   const { w, h, tile } = game.mapInfo();
-  const obstacles = game.solids.filter(s => s.x > tile && s.y > tile && s.x + s.w < w - tile && s.y + s.h < h - tile);
+  const obstacles = game.solids.filter(s => !s.boundary && s.x > tile && s.y > tile && s.x + s.w < w - tile && s.y + s.h < h - tile);
   let best = null, bestScore = Infinity;
   const verticalFirst = Math.random() < 0.5, direction = Math.random() < 0.5 ? -1 : 1;
   search: for (const vertical of [verticalFirst, !verticalFirst]) for (const offset of [0, -80, 80, -160, 160, -240, 240]) {
@@ -21,7 +21,8 @@ function planTrain(game, event) {
       for (let i = 0; i <= 200; i++) {
         const p = trainPoint(route, route.length * i / 200);
         if (obstacles.some(s => p.x > s.x - 32 && p.x < s.x + s.w + 32 && p.y > s.y - 32 && p.y < s.y + s.h + 32)) score += 10;
-        if (game.inPit(p.x, p.y, -40)) score += 6;
+        const hazard = game.inPit(p.x, p.y, -40);
+        if (hazard && hazard.kind !== 'void') score += 6;
       }
       if (score < bestScore) { best = route; bestScore = score; }
       if (score === 0) break search;
