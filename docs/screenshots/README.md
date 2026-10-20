@@ -44,3 +44,14 @@ Fresh captures from the same browser setup. Train screenshots use a route chosen
 | [Compact badge](mbg-logo-mobile.jpg) | The smaller badge at 844 × 390, with gameplay controls remaining active |
 
 Verified that the PNG is not requested on initial load, loads once during MBG warning, and is reused for both notifications. Notices are filtered to their recipient, dismiss after three seconds, and clear when the round resets.
+
+## Room master event controls
+
+| Capture | What it shows |
+|---|---|
+| [Master controls](event-settings-master.jpg) | Master disables train while the other eleven event types remain eligible |
+| [Guest view](event-settings-guest.jpg) | Matching settings are visible but cannot be edited by a guest |
+| [All events off](event-settings-off.jpg) | Global switch disables the event lottery while retaining individual choices |
+| [Mobile controls](event-settings-mobile.jpg) | Event selection fits a narrow lobby layout |
+
+Two actual browser clients exercised configuration sync, rejected guest WebSocket requests, Ready/countdown reset, preview skipping, global-off rounds, master handover/disconnect, map persistence, and mobile layout.

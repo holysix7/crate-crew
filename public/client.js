@@ -245,7 +245,7 @@ function updateRoom() {
   const [cpu, cd, active] = latest.lb;
   const me = latest.PL.find(p => p[0] === myId);
   const master = latest.ms, amMaster = master === myId;
-  const key = JSON.stringify([latest.PL.map(p => [p[0], p[1], p[2], p[7]]), latest.lb, latest.st, myTeam, meta.map.id, master]);
+  const key = JSON.stringify([latest.PL.map(p => [p[0], p[1], p[2], p[7]]), latest.lb, latest.es, latest.st, myTeam, meta.map.id, master]);
   if (key === roomKey) return;
   roomKey = key;
   // pilihan peta: hanya room master (status siap semua pemain direset saat diganti)
@@ -284,6 +284,7 @@ function updateRoom() {
   });
   $('cpu').checked = !!cpu;
   $('cpu').disabled = !amMaster;
+  updateEventOptions(amMaster, mName);
   const ready = !!(me && me[7]);
   $('ready').textContent = ready ? 'BATAL SIAP' : 'SIAP!';
   $('ready').classList.toggle('on', ready);
@@ -297,6 +298,30 @@ $('ready').onclick = () => {
   send({ t: 'ready', v: !(me && me[7]) });
 };
 $('cpu').onchange = e => send({ t: 'cpu', v: e.target.checked });
+$('events-enabled').onchange = e => send({ t: 'events', enabled: e.target.checked });
+function updateEventOptions(amMaster, masterName) {
+  const options = meta.eventOptions || [], state = latest.es || [1, 0];
+  $('room-events').hidden = !options.length;
+  const [enabled, mask] = state, box = $('event-options');
+  const signature = options.map(option => option.id).join(',');
+  if (box.dataset.options !== signature) {
+    box.replaceChildren(); box.dataset.options = signature;
+    for (const option of options) {
+      const label = document.createElement('label'), input = document.createElement('input');
+      input.type = 'checkbox'; input.dataset.event = option.id;
+      input.onchange = () => send({ t: 'events', kind: option.id, enabled: input.checked });
+      label.append(input, document.createTextNode(option.name)); box.append(label);
+    }
+  }
+  $('events-enabled').checked = !!enabled;
+  $('events-enabled').disabled = !amMaster;
+  box.disabled = !amMaster || !enabled;
+  box.querySelectorAll('input').forEach((input, i) => { input.checked = !!(mask & (1 << i)); });
+  const count = options.filter((_, i) => mask & (1 << i)).length;
+  $('events-count').textContent = enabled ? `${count}/${options.length} aktif` : 'Semua mati';
+  $('events-note').textContent = amMaster ? 'Khusus lobby · perubahan membatalkan Siap semua pemain.'
+    : `Diatur room master${masterName ? ' (' + masterName + ')' : ''} · hanya bisa diubah di lobby.`;
+}
 
 // ---------------- perintah tim ----------------
 const BUILD_OPTS = [['auto', 'Otomatis · pola'], ['weapon', 'Senjata · pola/1'], ['buddy', 'Buddy · 4 peti'],
@@ -538,6 +563,7 @@ function onEvent(e) {
     case 'board': burst(e.x, e.y, 10, 6, '#cccccc', 50, 0.4, 3, 20); sfx.pick(); break;
     case 'start': pushFeed('<b style="color:#f6c453">Ronde dimulai!</b> Kumpulkan peti untuk merakit Buddy.'); if (joined) sfx.build(); break;
     case 'cpu': pushFeed(`${esc(e.n)} ${e.v ? 'menyalakan' : 'mematikan'} CPU untuk tim kosong`); break;
+    case 'eventcfg': pushFeed(`${esc(e.n)} ${e.v ? 'mengaktifkan' : 'mematikan'} ${esc(e.name)}`); break;
     case 'order':
       if (e.t === myTeam) pushFeed(`<b style="color:${tcol(e.t)}">${esc(e.n)}</b>: ${esc(e.txt)}`);
       break;

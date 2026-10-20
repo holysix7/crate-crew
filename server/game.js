@@ -4,6 +4,12 @@
 const { ArenaEvents, EVENT_RULES } = require('./arena-events');
 const { Encounters } = require('./encounters');
 
+const EVENT_OPTIONS = [
+  { id: 'meteor', name: 'Hujan Meteor' }, { id: 'supply', name: 'Kiriman Peti' }, { id: 'rage', name: 'Monster Mengamuk' },
+  ...Object.entries(EVENT_RULES).map(([id, rule]) => ({ id, name: rule.name })),
+];
+const ALL_EVENTS_MASK = (1 << EVENT_OPTIONS.length) - 1;
+
 const T = 40, MW = 48, MH = 36, W = MW * T, H = MH * T;
 const TICK = 1 / 30;
 const TEAM_NAMES = ['Merah', 'Biru', 'Hijau', 'Kuning'];
@@ -164,6 +170,8 @@ class Game {
     this.time = 0;
     this.events = [];
     this.cpu = true; // tim tanpa pemain diisi 1 komandan CPU
+    this.eventsEnabled = true;
+    this.eventMask = ALL_EVENTS_MASK;
     this.master = 0; // id pemain room master (memilih peta, CPU, bisa mengeluarkan pemain)
     this.setMap(0);
     this.toLobby();
@@ -191,6 +199,7 @@ class Game {
     return JSON.stringify({
       t: 'welcome', teams: this.teams, colors: TEAM_COLORS.slice(0, this.teams), names: TEAM_NAMES.slice(0, this.teams), weapons: WLIST,
       arenaEvents: EVENT_RULES,
+      eventOptions: EVENT_OPTIONS,
       map: this.mapInfo(), maps: MAPS.map(m => ({ id: m.id, name: m.name })), hqMax: HQ_HP,
       wlabels: WLIST.map(k => WEAPONS[k].label), recipes: RECIPES.map(({ id, name, desc, lo, hi }) => ({ id, name, desc, lo, hi })),
     });
@@ -212,7 +221,7 @@ class Game {
     this.endTimer = 0; this.winner = -1; this.roundLeft = ROUND_TIME; this.crateTimer = 0.5; this.countdown = 0;
     this.encounters = new Encounters(this, WEAPONS);
     this.arenaEvents = new ArenaEvents(this);
-    this.previewQueue = [...this.previewEvents];
+    this.previewQueue = this.previewEvents.filter(kind => this.isEventEnabled(kind));
     this.pendingFirstEvent = this.previewQueue.shift() || null;
     this.meteors = []; this.evtTimer = this.pendingFirstEvent ? 8 : rand(40, 55); this.monsterTimer = 0;
   }
@@ -295,6 +304,28 @@ class Game {
     this.master = target.id;
     this.events.push({ k: 'master', n: target.name });
   }
+  isEventEnabled(kind) {
+    const i = EVENT_OPTIONS.findIndex(option => option.id === kind);
+    return this.eventsEnabled && i >= 0 && !!(this.eventMask & (1 << i));
+  }
+  configureEvents(p, m) {
+    if (!['lobby', 'countdown'].includes(this.state) || !this.isMaster(p, 'mengatur event')) return false;
+    if (typeof m.enabled !== 'boolean') return false;
+    let name = 'Semua event acak';
+    if (m.kind === undefined) {
+      if (this.eventsEnabled === m.enabled) return false;
+      this.eventsEnabled = m.enabled;
+    } else {
+      const i = EVENT_OPTIONS.findIndex(option => option.id === m.kind);
+      if (i < 0 || !!(this.eventMask & (1 << i)) === m.enabled) return false;
+      this.eventMask = m.enabled ? this.eventMask | (1 << i) : this.eventMask & ~(1 << i);
+      name = EVENT_OPTIONS[i].name;
+    }
+    for (const player of this.players.values()) player.ready = false;
+    this.state = 'lobby'; this.countdown = 0;
+    this.events.push({ k: 'eventcfg', n: p.name, name, v: m.enabled });
+    return true;
+  }
   findPlayer(name) {
     const q = name.trim().toLowerCase(), ps = [...this.players.values()];
     return ps.find(p => p.name.toLowerCase() === q) || ps.find(p => p.name.toLowerCase().startsWith(q)) || null;
@@ -354,6 +385,7 @@ class Game {
     } else if (this.state === 'lobby' || this.state === 'countdown') {
       // aksi ruang tunggu
       if (m.t === 'ready') p.ready = !!m.v;
+      else if (m.t === 'events') this.configureEvents(p, m);
       else if (m.t === 'team' && Number.isInteger(m.team) && m.team >= 0 && m.team < this.teams && m.team !== p.team) {
         p.team = m.team; p.ready = false;
       } else if ((m.t === 'map' || m.t === 'cpu') && !this.isMaster(p, m.t === 'map' ? 'memilih peta' : 'mengatur CPU')) {
@@ -807,7 +839,9 @@ class Game {
   randomEvent(forced = null) {
     const mon = this.monster();
     if (this.state !== 'playing' || this.arenaEvents.active || this.meteors.length || (mon && mon.rage > 0)) return false;
-    const opts = ['meteor', 'meteor', 'supply', ...(mon ? ['rage'] : []), ...Object.keys(EVENT_RULES)];
+    if (forced && !this.isEventEnabled(forced)) return false;
+    const opts = ['meteor', 'meteor', 'supply', ...(mon ? ['rage'] : []), ...Object.keys(EVENT_RULES)].filter(kind => this.isEventEnabled(kind));
+    if (!opts.length) return false;
     const k = forced || opts[(Math.random() * opts.length) | 0];
     if (Object.hasOwn(EVENT_RULES, k)) return this.arenaEvents.start(k);
     if (!opts.includes(k)) return false;
@@ -1075,9 +1109,14 @@ class Game {
     }
 
     // event acak, meteor, monster muncul lagi
-    if ((this.evtTimer -= dt) <= 0 && this.randomEvent(this.pendingFirstEvent)) {
-      this.pendingFirstEvent = this.previewQueue.shift() || null;
-      this.evtTimer = this.pendingFirstEvent ? (this.arenaEvents.active.warn + this.arenaEvents.active.duration + 6) : rand(45, 75);
+    if ((this.evtTimer -= dt) <= 0) {
+      while (this.pendingFirstEvent && !this.isEventEnabled(this.pendingFirstEvent)) this.pendingFirstEvent = this.previewQueue.shift() || null;
+      if (!this.eventsEnabled || !this.eventMask) {
+        this.pendingFirstEvent = null; this.previewQueue = []; this.evtTimer = rand(45, 75);
+      } else if (this.randomEvent(this.pendingFirstEvent)) {
+        this.pendingFirstEvent = this.previewQueue.shift() || null;
+        this.evtTimer = this.pendingFirstEvent ? (this.arenaEvents.active.warn + this.arenaEvents.active.duration + 6) : rand(45, 75);
+      } else this.evtTimer = 1; // temporarily unavailable (e.g. only rage enabled while monster is dead)
     }
     for (const m of this.meteors) if ((m.t -= dt) <= 0) this.explode(m.x, m.y, m.r, 55, -2, 0);
     this.meteors = this.meteors.filter(m => m.t > 0);
@@ -1244,6 +1283,7 @@ class Game {
       pm: this.pads.map((_, t) => this.padMask(t)), pr: this.pads.map((_, t) => this.planLabel(t)), ms: this.master,
       or: this.orders.map((o, t) => [o.build, o.mode, o.target, this.buildWant(t)]),
       lb: [this.cpu ? 1 : 0, Math.ceil(this.countdown), this.activeTeams()],
+      es: [this.eventsEnabled ? 1 : 0, this.eventMask],
       A: this.arenaEvents.snapshot(), D: this.encounters.snapshot(),
       M: this.meteors.map(m => [m.id, r1(m.x), r1(m.y), +m.t.toFixed(2), m.r]),
     });
@@ -1255,4 +1295,4 @@ class Game {
   }
 }
 
-module.exports = { Game, WEAPONS, TEAM_NAMES, TEAM_COLORS, RECIPES, matchRecipe };
+module.exports = { Game, WEAPONS, TEAM_NAMES, TEAM_COLORS, RECIPES, matchRecipe, EVENT_OPTIONS };

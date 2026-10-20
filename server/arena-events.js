@@ -22,7 +22,7 @@ class ArenaEvents {
 
   start(kind) {
     const g = this.game, rule = EVENT_RULES[kind];
-    if (!rule || this.active || g.state !== 'playing') return false;
+    if (!rule || !g.isEventEnabled(kind) || this.active || g.state !== 'playing') return false;
     const { w, h, tile } = g.mapInfo();
     const e = { id: g.id(), kind, age: 0, warn: rule.warn, duration: rule.duration || 0, x: w / 2, y: h / 2,
       dx: 1, dy: 0, radius: 250, width: 90, length: 0, speed: 0, started: false, drops: 0, hit: new Set() };

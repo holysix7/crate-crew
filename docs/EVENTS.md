@@ -16,6 +16,16 @@ Event pertama normalnya terjadi 40–55 detik setelah ronde dimulai, lalu undian
 
 Hujan meteor, kiriman peti, dan monster mengamuk juga tetap ada dalam rotasi. Semua aturan, klaim loot, damage, dan jam event dihitung server.
 
+## Pengaturan room master
+
+Di lobby, panel **Event acak** menyediakan sakelar utama dan pilihan untuk masing-masing 12 event: Meteor, Kiriman Peti, Monster Mengamuk, Blackhole, Naga, Tsunami, UFO, Helikopter, Ayam, LORD, Kereta Ngepot, dan Bansos MBG. Buka **Pilih event yang boleh muncul** untuk daftar lengkap.
+
+Hanya room master yang bisa mengubahnya, dan server menolak permintaan pemain lain. Semua pemain melihat pilihan yang sama. Perubahan membatalkan countdown serta status Siap semua pemain agar aturan baru disetujui sebelum mulai. Pengaturan tidak bisa diubah selama pertandingan.
+
+Sakelar utama mematikan semua undian event tanpa menghapus pilihan per event; nyalakan lagi untuk memakai pilihan yang sama. Menonaktifkan seluruh pilihan juga menghasilkan pertandingan tanpa event acak. Peti rutin dan monster penjaga tetap bagian dari permainan biasa.
+
+Pilihan bertahan saat ganti peta, ronde baru, master diserahkan, atau master keluar. Server baru mulai dengan semua event aktif. Event yang dimatikan tidak bisa dipilih undian maupun dipaksa lewat preview host; `EVENT_PREVIEW=train,mbg` melewati train bila train dimatikan. Bila semua preview dimatikan, permainan memakai interval normal untuk event yang masih aktif.
+
 ## Kereta Ngepot
 
 Setelah peringatan 6 detik, lokomotif dan dua gerbong melintasi arena selama 9 detik. Rel merah memperlihatkan seluruh jalur melengkung sebelum kereta datang; jalur yang sama dipakai untuk visual, minimap, dan tabrakan di server. Bot mencoba menyingkir dari rel.

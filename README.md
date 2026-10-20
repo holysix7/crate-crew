@@ -68,6 +68,8 @@ Di macOS, saat pertama kali jalan akan muncul dialog firewall *"Allow incoming c
 
 **Room master** 👑: pemain pertama yang masuk. Hanya room master yang memilih peta dan mengatur opsi CPU; di ruang tunggu ia melihat tombol ✕ (keluarkan pemain) dan 👑 (serahkan master) di samping nama pemain lain. Bisa juga lewat chat: `/kick nama`, `/master nama` (nama boleh awalan saja). Bila room master keluar, jabatan pindah ke pemain yang paling lama di ruangan.
 
+**Event acak (room master)**: di lobby, gunakan sakelar utama untuk semua event atau buka *Pilih event yang boleh muncul* untuk menyalakan/mematikan 12 event satu per satu. Pemain lain hanya melihat pilihan. Perubahan membatalkan Siap/countdown; pengaturan bertahan antar-ronde, ganti peta, dan pergantian master. Event yang dimatikan juga dilewati oleh preview. Peti rutin dan monster penjaga tetap ada.
+
 **Chat** ala Dota: tekan **Enter** untuk chat ke semua, **Shift+Enter** untuk chat tim (Tab di kolom chat = ganti Semua/Tim, Esc = batal). Pesan muncul di kiri bawah lalu memudar; jalan di ruang tunggu dan saat main. Maks 5 pesan per 5 detik.
 
 **Resep pola susunan (pad 2×2, maks 2 tingkat = 8 peti)** — tekan **R** di game untuk buku resep. Saat menaruh peti (**E**), peti masuk ke petak yang **dibidik** (bayangan peti transparan menunjukkan tempatnya); petak yang sudah terisi ditumpuk jadi tingkat 2. Lalu **Q** untuk merakit:

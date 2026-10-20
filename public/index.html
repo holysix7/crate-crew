@@ -88,6 +88,11 @@
         <label>Ruang tunggu <small class="muted">· klik tim untuk pindah · 👑 = room master</small></label>
         <div id="room" class="room"></div>
         <label class="check"><input type="checkbox" id="cpu"> Isi tim kosong dengan CPU <small class="muted">(kalau mati, tim tanpa pemain langsung gugur)</small></label>
+        <section id="room-events" class="room-events" aria-label="Pengaturan event acak">
+          <div class="room-events-head"><label class="check"><input type="checkbox" id="events-enabled"> Event acak</label><span id="events-count"></span></div>
+          <p id="events-note"></p>
+          <details><summary>Pilih event yang boleh muncul</summary><fieldset id="event-options" class="event-options" aria-label="Daftar event acak"></fieldset></details>
+        </section>
         <button id="ready" class="big">SIAP!</button>
         <p class="muted chat-tip"><kbd>Enter</kbd> chat semua · <kbd>Shift</kbd>+<kbd>Enter</kbd> chat tim</p>
       </div>
@@ -151,6 +156,7 @@
       </ul>
       <h3>Lebih adil &amp; lebih terbaca</h3>
       <ul class="patch-list">
+        <li><b>Kontrol room master:</b> di lobby, nyalakan/matikan semua event acak atau pilih event satu per satu. Semua pemain melihat pengaturan yang sama; perubahan membatalkan Siap. Pilihan disimpan antar-ronde, ganti peta, dan pergantian master.</li>
         <li>Tsunami membagi ulang kayu dan metal secara seimbang di tengah; senjata langka tetap di tempat agar tidak terkumpul di satu sisi.</li>
         <li>Event besar punya hitung mundur, petunjuk di layar, dan penanda minimap. Satu event besar aktif pada satu waktu.</li>
         <li>Bot mencoba menghindari bencana, memecahkan peti metal, dan ikut berebut airdrop. Ronde baru membersihkan semua event dan buff.</li>
