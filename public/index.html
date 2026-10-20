@@ -67,7 +67,7 @@
     <div class="card">
       <h1>CRATE<span>CREW</span></h1>
       <p class="sub">Fan-remake LAN · terinspirasi Team Buddies (PS1)</p>
-      <button type="button" class="patch-launch" data-patch-notes><span>BARU · 20 OKT 2026</span><b>Chaos &amp; Loot</b><small>6 peta besar · 2–4 tim · Event pilihan · Optimasi → Patch notes</small></button>
+      <button type="button" class="patch-launch" data-patch-notes><span>BARU · 20 OKT 2026</span><b>Chaos &amp; Loot</b><small>Arena 1v1 · 7 senjata melee · 6 peta · Optimasi → Patch notes</small></button>
 
       <div id="join-view">
         <label for="name">Nama</label>
@@ -83,6 +83,17 @@
       </div>
 
       <div id="room-view" hidden>
+        <label class="check duel-toggle"><input type="checkbox" id="duel-enabled"> Arena 1v1 <small class="muted">dua petarung · lainnya menonton</small></label>
+        <section id="duel-config" class="duel-config" hidden aria-label="Pengaturan arena 1v1">
+          <h3>Duel selang waktu</h3>
+          <p>Room master memilih dua petarung. Satu kill, lalu kembali ke lobby. Maksimal 2 menit.</p>
+          <div class="duel-selects"><label>Petarung merah<select id="duel-fighter-0" aria-label="Petarung merah"></select></label><span>VS</span><label>Petarung biru<select id="duel-fighter-1" aria-label="Petarung biru"></select></label></div>
+          <p id="duel-spectators" class="muted"></p>
+          <div id="duel-weapon-guide" class="duel-weapon-guide"></div>
+          <p class="muted">Keduanya mulai dengan Pedang dan 120 HP. Dekati rak, tekan E untuk mengganti senjata. Rak bersama tidak habis. Bidik dan tahan tembak untuk menyerang.</p>
+          <button type="button" id="duel-start" class="big">MULAI DUEL</button>
+        </section>
+        <div id="normal-settings">
         <label>Jumlah tim <small id="team-count-note" class="muted"></small></label>
         <div id="team-count" class="teams" aria-label="Jumlah tim"><button type="button" data-count="2">2 tim</button><button type="button" data-count="3">3 tim</button><button type="button" data-count="4">4 tim</button></div>
         <label>Peta <small id="maps-note" class="muted"></small></label>
@@ -97,6 +108,7 @@
           <p id="events-note"></p>
           <details><summary>Pilih event yang boleh muncul</summary><fieldset id="event-options" class="event-options" aria-label="Daftar event acak"></fieldset></details>
         </section>
+        </div>
         <button id="ready" class="big">SIAP!</button>
         <p class="muted chat-tip"><kbd>Enter</kbd> chat semua · <kbd>Shift</kbd>+<kbd>Enter</kbd> chat tim</p>
       </div>
@@ -137,7 +149,15 @@
       <button type="button" id="patch-close" aria-label="Tutup patch notes" autofocus>✕</button>
     </header>
     <div class="patch-body">
-      <p id="patch-intro">Enam peta besar, pilihan 2–4 tim, dan permainan lebih ringan! Pilih medan pertempuran, atur event sebagai room master, lalu berebut loot di arena yang lebih luas.</p>
+      <p id="patch-intro">Isi waktu dengan duel melee 1v1, atau bertempur di enam peta besar. Room master memilih petarung, jumlah tim, dan event; semua pemain lain bisa menikmati pertunjukannya.</p>
+      <h3>Arena 1v1 · tujuh senjata melee</h3>
+      <ul class="patch-list">
+        <li>Nyalakan <b>Arena 1v1</b> di lobby. Room master memilih dua pemain lalu menekan Mulai Duel. Semua pemain lain, termasuk yang baru bergabung, menjadi penonton.</li>
+        <li>Hitung mundur 3 detik, kedua petarung mulai dengan Pedang dan 120 HP. <b>Pedang, Tombak, Kapak, Palu, Belati, Halberd, dan Katana</b> tersedia di tujuh rak bersama; dekati lalu tekan E untuk mengganti senjata. Rak tidak habis.</li>
+        <li>Bidik dan tahan tembak untuk menyerang. Setiap senjata punya damage, jangkauan, kecepatan, dan waktu persiapan berbeda; lihat area ayunan. Tebasan tidak menembus tembok. Mengganti senjata tidak menghapus cooldown.</li>
+        <li>Satu kill mengakhiri duel. Hasil tampil 3 detik lalu otomatis kembali ke lobby, tanpa respawn di arena. Dua menit tanpa pemenang atau saling bunuh bersamaan berarti seri. Putus koneksi saat bertarung berarti kalah; saat hitung mundur berarti batal.</li>
+        <li>Arena khusus tidak memakai markas, peti, CPU, event, atau grab/throw pemain. Pilihan peta, tim, CPU, event, dan friendly fire pertandingan biasa tetap tersimpan. Master bisa mengakhiri duel kapan saja.</li>
+      </ul>
       <h3>6 medan pertempuran · 2,25× luas arena lama</h3>
       <ul class="patch-list">
         <li><b>Lembah Benteng:</b> rumput hijau, benteng berlapis, banyak bukit dan rute sayap.</li>
@@ -196,6 +216,12 @@
       <p class="patch-foot">Panduan lengkap juga tersedia di bagian Cara main pada lobby. Saat panel ini dibuka, karaktermu diam; pertandingan tetap berjalan.</p>
     </div>
   </dialog>
+
+  <aside id="duel-hud" class="duel-hud" hidden aria-label="Status duel 1v1">
+    <div class="duel-heading"><b>ARENA 1V1</b><span id="duel-clock"></span></div>
+    <div class="duel-healths"><div><strong id="duel-name-0"></strong><progress id="duel-hp-0" max="120" value="120" aria-label="HP petarung merah"></progress><small id="duel-weapon-0"></small></div><span>VS</span><div><strong id="duel-name-1"></strong><progress id="duel-hp-1" max="120" value="120" aria-label="HP petarung biru"></progress><small id="duel-weapon-1"></small></div></div>
+    <p id="duel-role"></p><button type="button" id="duel-abort">Akhiri duel · kembali ke lobby</button>
+  </aside>
 
   <script type="module" src="client.js"></script>
 </body>

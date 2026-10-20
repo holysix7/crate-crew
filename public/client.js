@@ -4,6 +4,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { HAZARD_COLORS, groundHeight, drawMapPreview } from './terrain.js';
 import { InstanceBatch } from './instance-batch.js';
+import { makeMeleeModel, addDuelDecor } from './duel-view.js';
 import { ArenaEventView, EVENT_COLORS, drawArenaMinimap } from './arena-events.js';
 import { makeUfo, makeChicken, makeLord, animateEncounter, makeAirdrop, animateAirdrop } from './encounters.js';
 
@@ -118,6 +119,7 @@ function renderQualityButtons() {
 // jarak kamera supaya terlihat ±760×420 unit dunia di layar berapa pun
 function camDist() {
   const t = Math.tan(FOV * Math.PI / 360);
+  if (meta?.map.duel) return Math.max(820/(2*t*Math.sin(PITCH)),1000/(2*t*(IW/IH)));
   return Math.max(420 / (2 * t), 760 / (2 * t * (IW / IH)));
 }
 
@@ -126,6 +128,7 @@ let meta = null, world = null, myId = 0, myTeam = -1, joined = false, selTeam = 
 const snaps = [];
 let latest = null, prevBullets = new Set();
 const particles = [], feed = [], floaters = [], booms = [];
+const duelTelegraphs=[];
 const cam = { x: 960, y: 720 };
 let shake = 0, aim = 0, time = 0, lastT = performance.now();
 const mouse = { x: 0, y: 0, down: false };
@@ -213,12 +216,14 @@ ws.onmessage = e => {
 
 function onWelcome(m) {
   meta = m;
+  for (const w of m.meleeWeapons || []) WCOL[m.weapons.indexOf(w.id)] = w.color;
   if (m.wlabels) WNAME = m.wlabels.map((n, i) => (i === 4 ? 'Meriam tank' : n));
   if (world && (world.mapId !== m.map.id || world.teamCount !== m.teams)) { disposeWorld(); snaps.length=0; latest=null; lastMe=null; prevBullets.clear(); } // server mengganti peta
   if (!world) world = buildWorld();
   if(selTeam>=m.teams)selTeam=-1;
   roomKey = '';
   $('join').disabled = false;
+  $('join').textContent=m.duel?.active?'MASUK SEBAGAI PENONTON':'MASUK RUANG TUNGGU';
   renderTeamButtons();
   renderBook();
 }
@@ -248,7 +253,7 @@ function renderTeamButtons() {
 }
 // ---------------- ruang tunggu ----------------
 for(const button of $('team-count').children)button.onclick=()=>send({t:'teams',count:Number(button.dataset.count)});
-const inRoom = () => joined && latest && (latest.st === 'lobby' || latest.st === 'countdown');
+const inRoom = () => joined && latest && (latest.st === 'lobby' || (latest.st === 'countdown' && !latest.duel?.active));
 let roomKey = '';
 function updateRoom() {
   $('join-view').hidden = joined;
@@ -258,9 +263,27 @@ function updateRoom() {
   const [cpu, cd, active, ff] = latest.lb;
   const me = latest.PL.find(p => p[0] === myId);
   const master = latest.ms, amMaster = master === myId;
-  const key = JSON.stringify([latest.PL.map(p => [p[0], p[1], p[2], p[7]]), latest.lb, latest.es, latest.st, myTeam, meta.map.id, meta.teams, master]);
+  const key = JSON.stringify([latest.PL.map(p => [p[0], p[1], p[2], p[7]]), latest.lb, latest.es, latest.duel, latest.st, myTeam, meta.map.id, meta.teams, master]);
   if (key === roomKey) return;
   roomKey = key;
+  const duel=latest.duel || {enabled:false,fighters:[]};
+  $('duel-enabled').checked=duel.enabled;$('duel-enabled').disabled=!amMaster;
+  $('normal-settings').hidden=duel.enabled;$('duel-config').hidden=!duel.enabled;$('ready').hidden=duel.enabled;
+  if(duel.enabled){
+    for(let side=0;side<2;side++){
+      const select=$('duel-fighter-'+side),placeholder=new Option('Pilih pemain',0);placeholder.disabled=true;select.replaceChildren(placeholder);
+      for(const p of latest.PL)select.add(new Option(p[1]+(p[0]===master?' 👑':''),p[0]));
+      select.value=String(duel.fighters[side]||0);select.disabled=!amMaster;
+    }
+    const viewers=latest.PL.filter(p=>!duel.fighters.includes(p[0]));
+    $('duel-spectators').textContent='Penonton: '+(viewers.map(p=>p[1]).join(', ')||'belum ada')+'. Pemain yang baru masuk ikut menonton.';
+    const ready=duel.fighters.length===2&&duel.fighters[0]!==duel.fighters[1]&&duel.fighters.every(id=>latest.PL.some(p=>p[0]===id));
+    $('duel-start').disabled=!amMaster||!ready;
+    $('status').textContent=ready?(amMaster?'Pilih petarung, lalu mulai duel.':'Menunggu room master memulai duel.'):'Butuh dua pemain yang terhubung.';
+    $('duel-weapon-guide').replaceChildren();
+    for(const w of meta.meleeWeapons||[]){const row=document.createElement('div');row.style.setProperty('--weapon-color',w.color);const title=document.createElement('b'),stats=document.createElement('small');title.textContent=w.label;stats.textContent=`${w.dmg} damage · jangkauan ${w.reach} · ${w.rate.toFixed(2)} dtk`;row.append(title,stats);$('duel-weapon-guide').append(row);}
+    return;
+  }
   for(const button of $('team-count').children) {
     const selected=Number(button.dataset.count)===meta.teams;
     button.classList.toggle('sel',selected);button.disabled=!amMaster;
@@ -328,6 +351,31 @@ $('ready').onclick = () => {
 $('cpu').onchange = e => send({ t: 'cpu', v: e.target.checked });
 $('ff').onchange = e => send({ t: 'ff', v: e.target.checked });
 $('events-enabled').onchange = e => send({ t: 'events', enabled: e.target.checked });
+$('duel-enabled').onchange=e=>send({t:'duel',enabled:e.target.checked});
+$('duel-start').onclick=()=>send({t:'duel',start:true});
+$('duel-abort').onclick=()=>send({t:'duel',abort:true});
+for(let side=0;side<2;side++)$('duel-fighter-'+side).onchange=()=>{
+  const ids=[0,1].map(i=>Number($('duel-fighter-'+i).value));
+  if(ids[0]===ids[1])ids[1-side]=latest.duel.fighters[side];
+  if(ids.every(Boolean)&&ids[0]!==ids[1])send({t:'duel',fighters:ids});
+};
+function updateDuelHud(){
+  const d=latest.duel;$('duel-hud').hidden=!joined||!d?.active;
+  if(!joined||!d?.active)return;
+  const side=d.fighters.indexOf(myId);
+  for(let i=0;i<2;i++){
+    const p=latest.PL.find(p=>p[0]===d.fighters[i]),u=latest.U.find(u=>u[10]===d.fighters[i]);
+    $('duel-name-'+i).textContent=p?.[1]||'Terputus';$('duel-hp-'+i).value=u?.[5]||0;
+    $('duel-weapon-'+i).textContent=u?`${u[5]}/${u[6]} HP · ${WNAME[u[7]]}`:'Selesai';
+  }
+  $('duel-clock').textContent=latest.st==='countdown'?`MULAI ${latest.lb[1]}`:latest.st==='ended'?'SELESAI':`${Math.floor(latest.rl/60)}:${String(latest.rl%60).padStart(2,'0')}`;
+  $('duel-role').textContent=side<0?'PENONTON · nikmati duel, pemain lain tetap aman.':'PETARUNG · bidik + tahan tembak · E tukar senjata di rak';
+  if(latest.st==='ended'){
+    const winner=latest.PL.find(p=>p[0]===d.result?.winner);
+    $('duel-role').textContent=(winner?winner[1]+' menang!':'Duel seri.')+` Kembali ke lobby dalam ${latest.et}…`;
+  }
+  $('duel-abort').hidden=latest.ms!==myId;
+}
 function updateEventOptions(amMaster, masterName) {
   const options = meta.eventOptions || [], state = latest.es || [1, 0];
   $('room-events').hidden = !options.length;
@@ -373,7 +421,7 @@ const sendMode = o => send({ t: 'order', mode: o.mode, target: o.target ?? -1 })
 let ordersKey = '';
 function updateOrders() {
   const panel = $('orders');
-  if (!joined || !latest || !latest.or || myTeam < 0 || inRoom()) { panel.classList.add('hidden'); ordersKey = ''; return; }
+  if (!joined || !latest || !latest.or || myTeam < 0 || inRoom() || latest.duel?.active) { panel.classList.add('hidden'); ordersKey = ''; return; }
   const [build, mode, target] = latest.or[myTeam];
   const key = [myTeam, build, mode, target, latest.al.join()].join('|');
   if (key === ordersKey) return;
@@ -397,7 +445,7 @@ function updateOrders() {
   }
 }
 function orderKey(code) {
-  if (!joined || !meta || inRoom()) return false;
+  if (!joined || !meta || inRoom() || latest?.duel?.active) return false;
   const d = /^Digit(\d)$/.exec(code);
   if (d && +d[1] >= 1 && +d[1] <= BUILD_OPTS.length) { sendBuild(BUILD_OPTS[+d[1] - 1][0]); return true; }
   const k = /^Key([A-Z])$/.exec(code);
@@ -451,6 +499,7 @@ function onSnap(m) {
     if(key!==joinRosterKey){joinRosterKey=key;renderTeamButtons();}
   }
   updateRoom();
+  updateDuelHud();
   updateOrders();
   updateTouch();
 }
@@ -597,6 +646,16 @@ function onEvent(e) {
       for (let i = 0; i < 4; i++) setTimeout(() => onEvent({ k: 'boom', x: e.x + (Math.random() - 0.5) * 100, y: e.y + (Math.random() - 0.5) * 100, r: 90 }), i * 180);
       break;
     case 'board': burst(e.x, e.y, 10, 6, '#cccccc', 50, 0.4, 3, 20); sfx.pick(); break;
+    case 'duelcfg': pushFeed(`${esc(e.n)} mengatur arena 1v1`); break;
+    case 'duelstart': pushFeed('<b style="color:#f6c453">ARENA 1V1</b> Dua petarung, satu kill!'); break;
+    case 'duelend': pushFeed(e.winner?'Duel selesai! Kembali ke lobby.':'Duel berakhir tanpa pemenang.'); break;
+    case 'duelweapon': if(e.p===myId)sfx.pick(); break;
+    case 'duelswing': {
+      const w=meta.meleeWeapons.find(w=>w.id===e.w);
+      duelTelegraphs.push({...e,until:performance.now()+(w.windup+0.1)*1000,arc:w.arc,color:w.color});
+      tone(280,0.07,0.025,'triangle');break;
+    }
+    case 'duelstrike': burst(e.x+Math.cos(e.a)*e.r*0.6,e.y+Math.sin(e.a)*e.r*0.6,18,8,meta.meleeWeapons.find(w=>w.id===e.w)?.color||'#fff',70,0.18,3,35); break;
     case 'start':
       pushFeed('<b style="color:#f6c453">Ronde dimulai!</b> Kumpulkan peti untuk merakit Buddy.' + (latest && latest.lb && latest.lb[3] ? ' <b style="color:#ff7a5a">FRIENDLY FIRE aktif</b> · E angkat pemain, F lempar.' : ''));
       if (joined) sfx.build(); break;
@@ -623,7 +682,7 @@ function slotPos(k) {
 }
 // { col: kolom yang dibidik, slot: tempat peti akan mendarat (-1 = pad penuh) }, null bila terlalu jauh dari pad
 function padTarget(me) {
-  if (!me || myTeam < 0 || !latest) return null;
+  if (!me || myTeam < 0 || !latest || meta.map.duel) return null;
   const b = meta.map.bases[myTeam], T = meta.map.tile;
   if (Math.hypot(me.x - b.pad.x, me.y - b.pad.y) >= 72) return null;
   let px = me.x + Math.cos(aim) * 30, py = me.y + Math.sin(aim) * 30;
@@ -746,7 +805,7 @@ const tin = { mx: 0, my: 0, fire: false, aiming: false };
 addEventListener('pointerdown', e => { if (e.pointerType === 'touch' && !useTouch) { useTouch = true; updateTouch(); } }, true);
 addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && useTouch && !matchMedia('(pointer: coarse)').matches) { useTouch = false; touchReset(); updateTouch(); } });
 function updateTouch() {
-  const on = useTouch && joined && !inRoom();
+  const on = useTouch && joined && !inRoom() && (!latest?.duel?.active || latest.duel.fighters.includes(myId));
   $('touch').classList.toggle('hidden', !on);
   document.body.classList.toggle('touch', useTouch);
   document.body.classList.toggle('playing', joined && !inRoom());
@@ -1414,6 +1473,7 @@ function buildWorld() {
   });
   trunks.castShadow = leaves.castShadow = true;
   W.root.add(trunks, leaves);
+  addDuelDecor(W,meta.map,meta.weapons);
   W.sharedGeometry=new Set(Object.values(W.geo));
   W.sharedMaterial=new Set(Object.values(W.mat).flat().filter(v=>v.isMaterial));
   W.sharedTexture=new Set(Object.values(W.mat).flat().filter(v=>v.isTexture));
@@ -1436,6 +1496,7 @@ function buildWorld() {
 // buang dunia lama (saat ganti peta) termasuk geometri/tekstur GPU-nya
 function disposeWorld() {
   if (!world) return;
+  duelTelegraphs.length=0;
   world.arenaView.dispose();
   const geometries = new Set(Object.values(world.geo)), materials = new Set(), textures = new Set();
   for (const asset of Object.values(world.mat).flat()) {
@@ -1477,6 +1538,10 @@ function makeGun() {
 function setGun(g, w) {
   if (g.userData.w === w) return;
   g.userData.w = w;
+  if(g.userData.melee){g.remove(g.userData.melee);disposeModel(g.userData.melee);g.userData.melee=null;}
+  const weapon=meta.meleeWeapons?.find(v=>v.id===meta.weapons[w]);
+  g.userData.body.visible=g.userData.stripe.visible=!weapon;
+  if(weapon){g.userData.melee=makeMeleeModel(weapon.id,world.mat,world.mat.guns[w]);g.add(g.userData.melee);return;}
   const len = GUN_LEN[w] || 18, th = GUN_TH[w] || 4.5;
   g.userData.body.scale.set(len, th, th);
   g.userData.stripe.scale.set(len * 0.6, th + 0.6, th * 0.5);
@@ -1652,6 +1717,7 @@ function updateLootBatches(W,S) {
   }
   for(const p of S.pickups) {
     const h=hAt(p[1],p[2]);
+    if(meta.map.duel){B.pickupGlows[p[3]].put(batchMatrix(p[1],h+1,p[2],-Math.PI/2,0,0,18));continue;}
     const matrix=batchMatrix(p[1],h+18+Math.sin(time*4+p[0])*3,p[2],0,time*1.8);
     B.pickup.put(matrix);B.pickupBands[p[3]].put(matrix);
     B.pickupGlows[p[3]].put(batchMatrix(p[1],h+1,p[2],-Math.PI/2,0,0,14));
@@ -1723,6 +1789,7 @@ function updateWorld(S, me, dt) {
     const st = u.moving ? Math.sin(ph) * 5 : 0;
     d.feet[0].position.x = st; d.feet[1].position.x = -st;
     setGun(d.gun, u.w);
+    d.gun.rotation.y=d.gun.userData.melee&&u.anim>0?Math.sin(u.anim*14)*0.9:0;
     d.gun.visible = !u.carry && !u.holding;
     d.shield.visible = !!u.shield;
     if (u.shield) W.mat.shield.opacity = 0.2 + Math.sin(time * 20) * 0.1;
@@ -1883,7 +1950,9 @@ function frame() {
   // kamera: mengikuti pemain, sedikit condong ke arah bidikan (mouse atau stik)
   let tx = map.w / 2, ty = map.h / 2;
   const lead = 1000 / Math.max(1, IW);
-  if (me && aimMode === 'stick') {
+  if (map.duel) {
+    cam.x=tx;cam.y=ty;
+  } else if (me && aimMode === 'stick') {
     tx = me.x + Math.cos(aim) * 50; ty = me.y + Math.sin(aim) * 45;
   } else if (me) {
     tx = me.x + clamp((mouse.x - IW / 2) * lead, -300, 300) * 0.18;
@@ -2000,8 +2069,35 @@ function panel(x, y, w, h) {
 function text(s, x, y, size, col, align = 'left', weight = 800) {
   ctx.font = `${weight} ${size}px system-ui`; ctx.textAlign = align; ctx.fillStyle = col; ctx.fillText(s, x, y);
 }
+function drawDuelHUD(S,me){
+  const now=performance.now();
+  for(let i=duelTelegraphs.length-1;i>=0;i--)if(duelTelegraphs[i].until<now)duelTelegraphs.splice(i,1);
+  for(const e of duelTelegraphs){
+    const owner=S.units.find(u=>u.id===e.id)||e,x=owner.x,y=owner.y;
+    const origin=toScreen(x,2,y),half=Math.acos(e.arc);if(!origin)continue;
+    ctx.beginPath();ctx.moveTo(origin.x,origin.y);
+    for(let i=0;i<=20;i++){const a=e.a-half+2*half*i/20,p=toScreen(x+Math.cos(a)*e.r,2,y+Math.sin(a)*e.r);if(p)ctx.lineTo(p.x,p.y);}
+    ctx.closePath();ctx.globalAlpha=0.22;ctx.fillStyle=e.color;ctx.fill();ctx.globalAlpha=0.8;ctx.strokeStyle=e.color;ctx.lineWidth=2;ctx.stroke();ctx.globalAlpha=1;
+  }
+  for(const p of S.pickups){
+    const screen=toScreen(p[1],78,p[2]);if(!screen)continue;
+    text(WNAME[p[3]],screen.x,screen.y,11,WCOL[p[3]],'center');
+    if(me&&Math.hypot(me.x-p[1],me.y-p[2])<36)text('E · tukar',screen.x,screen.y+14,10,'#fff','center');
+  }
+  const d=latest.duel;
+  if(latest.st==='countdown'){
+    text(String(latest.lb[1]||1),IW/2,IH/2,64,'#f6c453','center');
+  }else if(latest.st==='ended'){
+    const winner=latest.PL.find(p=>p[0]===d.result?.winner);
+    const w=Math.min(430,IW-20);panel(IW/2-w/2,IH/2-52,w,102);
+    text(winner?`${winner[1]} MENANG!`:'DUEL SERI',IW/2,IH/2-8,IW<600?23:30,'#f6c453','center');
+    text(`Kembali ke lobby dalam ${latest.et}…`,IW/2,IH/2+25,14,'#cfd8c8','center');
+  }
+  text(me?'Bidik + tahan tembak · E di rak untuk tukar senjata':'PENONTON · satu kill menentukan pemenang',IW/2,IH-25,IW<600?10:13,'#fff','center',700);
+}
 function drawHUD(S, me, dt) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if(meta.map.duel){drawDuelHUD(S,me);return;}
   const map = meta.map, T = map.tile;
   const small = IW < 700 || useTouch;
 

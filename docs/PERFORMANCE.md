@@ -109,3 +109,7 @@ node benchmarks/server.js
 ### Friendly-fire integration
 
 The optimization measurements above were captured at commit `8de7fc9`, before integrating PR #4. Friendly fire appends carry/flight flags to unit snapshots and a lobby flag; current snapshot byte counts and hashes therefore include those protocol additions. The recorded raw measurements describe the optimization pass at that commit. Team-count and map changes preserve friendly fire, and accepted changes send immediately despite the reduced lobby snapshot rate.
+
+### Duel arena
+
+Arena 1v1 keeps only two infantry units and seven shared weapon racks, with no normal-round AI, bullets, crafting, events or respawns. It reuses the existing snapshot cadence and collision index. Weapon models and arena details are generated in code without extra textures or dependencies. Two complete browser weapon-swap cycles end at 65 GPU geometries and 4 textures each; replaced private model geometry is disposed. This is a resource-retention check, not an FPS benchmark. The optional `duel` snapshot field is new; the optimization timing/byte measurements above remain scoped to their recorded commit.
