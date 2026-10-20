@@ -261,7 +261,7 @@ class Encounters {
     u.cd = boss ? 1 : 0.7; u.anim = 0.3;
     g.events.push({ k: 'slash', x: u.x, y: u.y, a: u.a, r: range, t: u.team });
     for (const v of [...g.units.values()]) {
-      if (v.id === u.id || v.team === u.team || v.abducted || v.fly || v.neutral || distance(u, v) > range + v.r) continue;
+      if (v.id === u.id || (v.team === u.team && !g.friendly(u.team, u.id, v)) || v.abducted || v.fly || v.neutral || distance(u, v) > range + v.r) continue;
       const angle = Math.atan2(v.y - u.y, v.x - u.x) - u.a;
       if (Math.cos(angle) < 0.2 || !g.los(u.x, u.y, v.x, v.y)) continue;
       g.damage(v, boss ? LORD.bossDamage : LORD.playerDamage, u.id);

@@ -91,6 +91,7 @@
         <label>Ruang tunggu <small class="muted">· klik tim untuk pindah · 👑 = room master</small></label>
         <div id="room" class="room"></div>
         <label class="check"><input type="checkbox" id="cpu"> Isi tim kosong dengan CPU <small class="muted">(kalau mati, tim tanpa pemain langsung gugur)</small></label>
+        <label class="check"><input type="checkbox" id="ff"> Friendly fire <small class="muted">(peluru &amp; ledakan melukai tim sendiri · E angkat / F lempar pemain)</small></label>
         <section id="room-events" class="room-events" aria-label="Pengaturan event acak">
           <div class="room-events-head"><label class="check"><input type="checkbox" id="events-enabled"> Event acak</label><span id="events-count"></span></div>
           <p id="events-note"></p>
@@ -174,6 +175,13 @@
         <li>Tsunami membagi ulang kayu dan metal secara seimbang di tengah; senjata langka tetap di tempat agar tidak terkumpul di satu sisi.</li>
         <li>Event besar punya hitung mundur, petunjuk di layar, dan penanda minimap. Satu event besar aktif pada satu waktu.</li>
         <li>Bot mencoba menghindari bencana, memecahkan peti metal, dan ikut berebut airdrop. Ronde baru membersihkan semua event dan buff.</li>
+      </ul>
+      <h3>Friendly fire &amp; lempar pemain</h3>
+      <ul class="patch-list">
+        <li>Room master bisa menyalakan <b>Friendly fire</b> di lobby. Default mati; perubahan membatalkan Siap dan hitung mundur. Pilihan tetap tersimpan saat ganti peta.</li>
+        <li>Saat aktif, peluru, ledakan, peti lempar, tabrakan kendaraan, dan tebasan LORD bisa melukai teman. Serangan sendiri tidak melukai pemiliknya; teamkill tidak menambah skor.</li>
+        <li><kbd>E</kbd> mengangkat infanteri terdekat, <kbd>E</kbd> lagi menurunkan, <kbd>F</kbd> melempar. Peti, loot, dan kendaraan tetap diprioritaskan. Tidak bisa mengangkat LORD, pemain berperisai, atau orang yang sedang membawa pemain lain.</li>
+        <li>Korban kebal selama diangkat atau terbang, otomatis turun setelah 5 detik. Mendarat mengurangi 15 HP; tabrakan mengurangi 25 HP korban lain; mendarat di jurang atau sungai dalam mematikan. Pengangkat tidak bisa menembak.</li>
       </ul>
       <h3>Lebih ringan untuk dimainkan</h3>
       <ul class="patch-list">

@@ -105,3 +105,7 @@ node benchmarks/server.js
 ## Phaser assessment
 
 [Phaser describes itself as a 2D framework](https://github.com/phaserjs/phaser). This client uses Three.js meshes, 3D terrain, a perspective camera, lighting and shadows. Adding Phaser would leave those rendering hot paths in place; replacing them would require a substantial rendering port. This PR keeps the existing engine and addresses the measured draw calls, resource lifetime, wall queries and network serialization directly, with no new runtime library.
+
+### Friendly-fire integration
+
+The optimization measurements above were captured at commit `8de7fc9`, before integrating PR #4. Friendly fire appends carry/flight flags to unit snapshots and a lobby flag; current snapshot byte counts and hashes therefore include those protocol additions. The recorded raw measurements describe the optimization pass at that commit. Team-count and map changes preserve friendly fire, and accepted changes send immediately despite the reduced lobby snapshot rate.

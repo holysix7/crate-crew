@@ -64,3 +64,26 @@ test('indexed line of sight matches a full scan and respects custom test geometr
  for(let n=0;n<400;n++){const args=[random()*2880,random()*2160,random()*2880,random()*2160],pad=n%2?19:0;assert.equal(g.los(...args,null,pad),reference(...args,pad));}
  g.solids=[];assert.equal(g.los(100,100,1500,100),true);
 });
+
+test('friendly fire updates immediately at lobby cadence and survives team/map changes',()=>{
+ const {g,host,guest}=room();g.broadcast(true);const n=guest.messages.length;
+ g.onMsg(host.c,{t:'ff',v:true});
+ assert.equal(guest.messages.length,n+1);assert.equal(guest.messages.at(-1).lb[3],1);
+ assert.ok(guest.messages.at(-1).ev.some(e=>e.k==='ff'&&e.v));
+ g.onMsg(host.c,{t:'events',kind:'train',enabled:false});const mask=g.eventMask;
+ g.onMsg(host.c,{t:'teams',count:2});assert.equal(g.ff,true);assert.equal(g.eventMask,mask);
+ g.onMsg(host.c,{t:'map',i:3});assert.equal(g.ff,true);assert.equal(g.eventMask,mask);
+ g.onMsg(guest.c,{t:'ff',v:false});assert.equal(g.ff,true);
+ g.startRound();g.onMsg(host.c,{t:'ff',v:false});assert.equal(g.ff,true);
+});
+test('grab and throw finish on every arena for each configured team count',()=>{
+ for(const count of [2,3,4])for(let map=0;map<MAPS.length;map++){
+  const g=new Game(count);g.setMap(map);g.clearWorld();g.state='playing';g.ff=true;
+  const spawn=g.bases[0].spawn,a=g.spawnUnit(0,'human',spawn.x,spawn.y);
+  a.shield=0;a.a=Math.atan2(1080-a.y,1440-a.x);
+  const v=g.spawnUnit(1,'human',a.x+Math.cos(a.a)*29,a.y+Math.sin(a.a)*29);v.shield=0;
+  g.grabUnit(a);assert.equal(a.holding,v.id,`map=${map}, teams=${count}`);
+  g.throwUnit(a);for(let n=0;n<60;n++)g.tickHeld(1/30);
+  assert.ok(!a.holding);assert.ok(!g.units.has(v.id)||(!v.abducted&&!v.flight&&!v.heldBy));
+ }
+});
