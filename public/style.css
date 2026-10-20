@@ -133,3 +133,53 @@ body.touch .chat-log { max-height: 30vh; }
 }
 
 kbd { display: inline-block; padding: 1px 6px; border-radius: 5px; background: #0d130c; border: 1px solid #3b4d36; font: 600 11px ui-monospace, monospace; color: #f3f1e8; }
+
+.arena-status { position: fixed; z-index: 6; top: 86px; left: 50%; transform: translateX(-50%); width: min(460px, calc(100vw - 32px)); padding: 10px 16px; border: 1px solid var(--event-color, #fff); border-radius: 10px; background: rgba(12,17,22,.9); text-align: center; pointer-events: none; box-shadow: 0 3px 18px rgba(0,0,0,.3); }
+.arena-status[hidden] { display: none; }
+.arena-status strong { display: block; color: var(--event-color); font-size: 15px; }
+.arena-status span { display: block; color: #e2e9dd; font-size: 12px; line-height: 1.4; margin-top: 3px; }
+.event-guide { margin: 10px 0; padding: 9px 10px; border: 1px solid #526b63; border-radius: 8px; background: #172620; }
+.event-guide summary { cursor: pointer; color: #a6e4e9; font-weight: 800; }
+@media (max-width: 600px) { .arena-status { top: 82px; width: min(340px, calc(100vw - 24px)); padding: 7px 10px; } .arena-status strong { font-size: 13px; } .arena-status span { font-size: 11px; } }
+
+.action-tip { position: fixed; z-index: 9; left: 50%; bottom: 90px; transform: translateX(-50%); max-width: min(520px, 90vw); background: #152a31; color: #c9f7ff; border: 1px solid #7acddd; padding: 10px 16px; border-radius: 9px; text-align: center; pointer-events: none; font-size: 13px; }
+.action-tip[hidden] { display: none; }
+
+/* Catatan rilis bisa dibaca dari dashboard maupun saat bermain. */
+.patch-launch { display: grid; gap: 4px; width: 100%; padding: 13px 14px; text-align: left; font: inherit; color: #f3f1e8; background: linear-gradient(120deg, #253e37, #162c29); border: 1px solid #79b3a1; border-radius: 10px; cursor: pointer; }
+.patch-launch:hover { border-color: #f6c453; background: #2b4438; }
+.patch-launch span { color: #f6c453; font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+.patch-launch b { font-size: 21px; }
+.patch-launch small { font-size: 11px; color: #c7d9ce; }
+.patch-notes { width: min(880px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; overflow: auto; color: #e5eee8; background: #16241f; border: 1px solid #6a9382; border-radius: 16px; box-shadow: 0 20px 90px #0009; }
+.patch-notes::backdrop { background: #08100dd9; backdrop-filter: blur(5px); }
+.patch-head { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 18px 26px; background: #1c3129; border-bottom: 1px solid #3a584a; }
+.patch-date { margin: 0 0 6px; color: #f6c453; font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+.patch-head h2 { margin: 0; color: #fff6c8; font-size: 30px; letter-spacing: -.02em; }
+.patch-head button { flex: none; width: 40px; height: 40px; color: #e5eee8; background: #0e201a; border: 1px solid #527561; border-radius: 10px; font: 700 18px system-ui; cursor: pointer; }
+.patch-notes button:focus-visible, .patch-launch:focus-visible { outline: 2px solid #f6c453; outline-offset: 3px; }
+.patch-body { padding: 0 26px 20px; font-size: 13px; line-height: 1.55; }
+#patch-intro { color: #b9d0c2; margin: 18px 0; font-size: 14px; }
+.patch-body h3 { margin: 22px 0 12px; color: #f6c453; font-size: 15px; }
+.patch-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.patch-grid article, .patch-lord { padding: 14px 16px; border: 1px solid #395247; border-top: 2px solid var(--accent); border-radius: 9px; background: #1b2e26; }
+.patch-body article > span { color: #a7bbaf; font-size: 9px; font-weight: 800; letter-spacing: .06em; }
+.patch-body h4 { margin: 4px 0 6px; font-size: 19px; color: var(--accent); }
+.patch-body article p { margin: 5px 0; }
+.patch-lord { margin-top: 12px; background: linear-gradient(120deg, #1c3634, #1a2e27); }
+.patch-lord > strong { display: block; margin-top: 10px; color: #b3efec; }
+.patch-stats { display: flex; gap: 28px; margin: 12px 0; }
+.patch-stats b { color: #f6c453; font-size: 10px; letter-spacing: .06em; }
+.patch-stats small { display: block; color: #eff8f3; font-size: 14px; letter-spacing: 0; }
+.patch-list { margin: 0; padding-left: 20px; color: #c5d7cb; }
+.patch-list li { margin: 8px 0; }
+.patch-list b { color: #eef6ec; }
+.patch-foot { margin: 20px 0 0; padding-top: 14px; border-top: 1px solid #395247; color: #a8bbaf; font-size: 11px; }
+@media (max-width: 600px) {
+  .patch-head { padding: 14px 16px; }
+  .patch-body { padding: 0 16px 16px; }
+  .patch-head h2 { font-size: 26px; }
+  .patch-date { font-size: 8px; }
+  .patch-grid { grid-template-columns: 1fr; }
+  .patch-stats { gap: 18px; }
+}

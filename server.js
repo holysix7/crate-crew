@@ -7,6 +7,11 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { Game } = require('./server/game');
+const { EVENT_RULES } = require('./server/arena-events');
+const PREVIEW_EVENTS = (process.env.EVENT_PREVIEW || '').split(',').map(s => s.trim()).filter(Boolean);
+if (PREVIEW_EVENTS.some(k => !Object.hasOwn(EVENT_RULES, k))) {
+  throw new Error('EVENT_PREVIEW harus salah satu: ' + Object.keys(EVENT_RULES).join(', '));
+}
 
 const PORT = +process.env.PORT || 8080;
 const TEAMS = Math.max(2, Math.min(4, +process.env.TEAMS || 2));
@@ -93,7 +98,7 @@ class WSConn {
   }
 }
 
-const game = new Game(TEAMS);
+const game = new Game(TEAMS, { firstEvent: PREVIEW_EVENTS });
 
 server.on('upgrade', (req, socket) => {
   const key = req.headers['sec-websocket-key'];
@@ -114,6 +119,7 @@ let next = Date.now();
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log('\n  CRATE CREW server jalan  (' + TEAMS + ' tim)');
+  if (PREVIEW_EVENTS.length) console.log('  Preview: ' + PREVIEW_EVENTS.map(k => EVENT_RULES[k].name).join(' → ') + ' (mulai 8 detik setelah ronde dimulai)');
   console.log('  Di komputer ini :  http://localhost:' + PORT);
   for (const list of Object.values(os.networkInterfaces())) {
     for (const ni of list || []) {

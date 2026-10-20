@@ -2,6 +2,8 @@
 // Dunia dirender 3D (WebGL / three.js, ada di public/vendor); HUD & label digambar di kanvas 2D di atasnya.
 // Semua tekstur digambar lewat kode (canvas), tanpa file gambar.
 import * as THREE from './vendor/three.module.min.js';
+import { ArenaEventView, EVENT_COLORS, drawArenaMinimap } from './arena-events.js';
+import { makeUfo, makeChicken, makeLord, animateEncounter, makeAirdrop, animateAirdrop, disposeEncounter } from './encounters.js';
 
 const cv = document.getElementById('game');
 const hud = document.getElementById('hud');
@@ -13,10 +15,10 @@ const lerpAng = (a, b, f) => { let d = b - a; while (d > Math.PI) d -= Math.PI *
 
 // urutan sama dengan WEAPONS di server (nama dari server menimpa saat welcome)
 let WNAME = ['Pistol', 'SMG', 'Shotgun', 'Bazooka', 'Meriam tank', 'Senapan mesin', 'Sniper', 'Pelontar api', 'Pelontar granat', 'Minigun', 'Laser'];
-const WCOL = ['#d8d8d8', '#4fc3f7', '#ff8a65', '#9ccc65', '#c9b458', '#e0e0e0', '#b388ff', '#ff7043', '#c0ca33', '#ffd54f', '#ff4081'];
-const GUN_LEN = [14, 18, 20, 26, 26, 20, 30, 20, 18, 22, 24], GUN_TH = [4.5, 4.5, 4.5, 7, 7, 4.5, 4, 7, 6.5, 6.5, 5];
+const WCOL = ['#d8d8d8', '#4fc3f7', '#ff8a65', '#9ccc65', '#c9b458', '#e0e0e0', '#b388ff', '#ff7043', '#c0ca33', '#ffd54f', '#ff4081', '#ffb74d', '#58e5ff'];
+const GUN_LEN = [14, 18, 20, 26, 26, 20, 30, 20, 18, 22, 24, 34, 22], GUN_TH = [4.5, 4.5, 4.5, 7, 7, 4.5, 4, 7, 6.5, 6.5, 5, 8, 5];
 // jenis unit dari server: 0 pemain, 1 bot, 2 turret, 3 tank, 4 jeep
-const K_TANK = 3, K_JEEP = 4, K_MON = 5, VNAME = { 3: 'Tank', 4: 'Jeep' };
+const K_TANK = 3, K_JEEP = 4, K_MON = 5, K_UFO = 6, K_CHICKEN = 7, K_LORD = 8, VNAME = { 3: 'Tank', 4: 'Jeep' };
 const MON_COL = '#c77dff';
 const isVeh = u => u.kind === K_TANK || u.kind === K_JEEP;
 const WALL_H = 44, HQ_H = 64, CRATE = 30, GUN_H = 16;
@@ -131,6 +133,7 @@ let showScore = false, muted = false;
 let aimMode = 'mouse', cursor = null;
 let kicked = '';
 let fps = 0, fpsN = 0, fpsT = 0, fpsLast = performance.now();
+let actionTipTimer;
 let banner = null; // pengumuman event besar di tengah atas layar
 renderQualityButtons();
 applyShadows();
@@ -184,6 +187,7 @@ ws.onclose = () => {
   $('status').textContent = kicked ? `Kamu dikeluarkan dari ruangan oleh room master (${kicked}).` : 'Terputus dari server. Muat ulang halaman.';
   $('join').disabled = true; joined = false;
   closeChat(); updateRoom(); updateOrders(); updateTouch();
+  $('arena-status').hidden = true;
 };
 ws.onmessage = e => {
   const m = JSON.parse(e.data);
@@ -368,6 +372,7 @@ function onSnap(m) {
   // reset bila jam server mundur (server restart)
   if (latest && m.tm < latest.tm) snaps.splice(0, snaps.length - 1);
   latest = m;
+  updateArenaStatus(m.A);
   const me = m.PL.find(p => p[0] === myId);
   if (me) myTeam = me[2];
   // suara tembakan dari peluru baru
@@ -388,6 +393,24 @@ function onSnap(m) {
   updateRoom();
   updateOrders();
   updateTouch();
+}
+
+// Peringatan tetap terlihat sepanjang event, termasuk pemain yang baru tersambung.
+let arenaStatusKey = '';
+function updateArenaStatus(e) {
+  const box = $('arena-status');
+  const visible = !!e && latest.st === 'playing' && joined;
+  box.hidden = !visible;
+  if (!visible) { arenaStatusKey = ''; return; }
+  const warning = e.age < e.warn;
+  const seconds = Math.max(0, Math.ceil(warning ? e.warn - e.age : e.warn + e.duration - e.age));
+  const key = [e.id, warning, seconds].join(':');
+  if (arenaStatusKey === key) return;
+  arenaStatusKey = key;
+  const rule = meta.arenaEvents[e.kind];
+  box.style.setProperty('--event-color', EVENT_COLORS[e.kind]);
+  $('arena-name').textContent = rule.name + (warning ? ' mendekat' : ' aktif') + ' · ' + seconds + ' dtk';
+  $('arena-hint').textContent = rule.hint;
 }
 
 // ---------------- partikel (InstancedMesh, 3D) ----------------
@@ -459,7 +482,7 @@ function onEvent(e) {
       sfx.thud(near(e.x, e.y)); tone(70, 0.4, 0.25 * near(e.x, e.y), 'sine', -30);
       break;
     case 'evt':
-      banner = { name: e.name, d: e.d, t: 4 };
+      banner = latest && latest.A ? null : { name: e.name, d: e.d, t: 4 };
       pushFeed(`<b style="color:#ffb347">${esc(e.name)}</b> ${esc(e.d)}`);
       tone(880, 0.15, 0.08, 'square'); tone(660, 0.15, 0.08, 'square', 0, 0.18); tone(880, 0.25, 0.08, 'square', 0, 0.36);
       break;
@@ -480,6 +503,10 @@ function onEvent(e) {
       burst(e.x, e.y, 14, 18, '#fff6c8', 140, 0.6, 2.5, 80);
       if (e.t === myTeam) sfx.build();
       break;
+    case 'shatter': burst(e.x, e.y, 15, 16, '#b9d4df', 160, 0.55, 4, 80); sfx.bonk(near(e.x, e.y)); break;
+    case 'slash': burst(e.x + Math.cos(e.a) * e.r * 0.6, e.y + Math.sin(e.a) * e.r * 0.6, 30, 16, '#8cffff', 180, 0.3, 4, 80); sfx.shot(near(e.x, e.y)); break;
+    case 'claim': pushFeed(`<b style="color:${tcol(e.t)}">${esc(e.n)}</b> merebut airdrop: Super Bazooka + Tank!`); if (e.t === myTeam) sfx.build(); break;
+    case 'tip': if (e.p === myId) { pushFeed(esc(e.txt)); $('action-tip').textContent = e.txt; $('action-tip').hidden = false; clearTimeout(actionTipTimer); actionTipTimer = setTimeout(() => { $('action-tip').hidden = true; }, 3500); } break;
     case 'steal': pushFeed(`<b style="color:${tcol(e.by)}">${tname(e.by)}</b> mencuri peti tim <b style="color:${tcol(e.t)}">${tname(e.t)}</b>!`); break;
     case 'hq':
       pushFeed(`Markas <b style="color:${tcol(e.t)}">${tname(e.t)}</b> HANCUR!`);
@@ -528,9 +555,19 @@ function sendGrab() {
 }
 
 // ---------------- input: keyboard & mouse ----------------
+const patchNotesOpen = () => $('patch-notes').open;
+function openPatchNotes() {
+  closeChat(); toggleBook(false); touchReset();
+  for (const k in keys) keys[k] = false;
+  mouse.down = false; showScore = false;
+  $('patch-notes').showModal();
+  $('patch-notes').scrollTop = 0;
+}
+for (const b of document.querySelectorAll('[data-patch-notes]')) b.onclick = openPatchNotes;
+$('patch-close').onclick = () => $('patch-notes').close();
 const typing = () => { const a = document.activeElement; return a && a.tagName === 'INPUT' && a.type !== 'checkbox'; };
 addEventListener('keydown', e => {
-  if (typing()) return;
+  if (patchNotesOpen() || typing()) return;
   if (e.key === 'Enter' && joined && !e.isComposing) { e.preventDefault(); openChat(e.shiftKey); return; }
   if (e.code === 'Tab') { e.preventDefault(); showScore = true; }
   if (e.code === 'Escape') toggleBook(false);
@@ -549,7 +586,7 @@ addEventListener('keyup', e => { keys[e.code] = false; if (e.code === 'Tab') sho
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouse.down = false; });
 cv.addEventListener('mousemove', e => { if (useTouch) return; mouse.x = e.clientX; mouse.y = e.clientY; aimMode = 'mouse'; });
 cv.addEventListener('mousedown', e => {
-  if (useTouch) return;
+  if (useTouch || patchNotesOpen()) return;
   initAudio();
   if (e.button === 0) mouse.down = true;
   if (e.button === 2 && joined) send({ t: 'act', k: 'throw' });
@@ -689,6 +726,7 @@ for (const b of document.querySelectorAll('#touch [data-ui]')) {
     else if (k === 'book') toggleBook();
     else if (k === 'score') b.classList.toggle('sel', (showScore = !showScore));
     else if (k === 'chat') openChat(false);
+    else if (k === 'patch') openPatchNotes();
     else if (k === 'full') toggleFullscreen();
   });
 }
@@ -712,6 +750,7 @@ function cycleOrder(dir, build) {
 }
 function pollGamepad() {
   gin.mx = gin.my = 0; gin.fire = gin.aiming = false;
+  if (patchNotesOpen()) return;
   const gp = navigator.getGamepads ? [...navigator.getGamepads()].find(g => g && g.connected) : null;
   if (!gp) return;
   const ax = i => { const v = gp.axes[i] || 0; return Math.abs(v) < 0.2 ? 0 : v; };
@@ -738,6 +777,7 @@ function pollGamepad() {
 setInterval(() => {
   pollGamepad();
   if (!joined) return;
+  if (patchNotesOpen()) { send({ t: 'in', mx: 0, my: 0, a: +aim.toFixed(3), f: 0 }); return; }
   const k = c => (keys[c] ? 1 : 0);
   const smx = tin.mx + gin.mx, smy = tin.my + gin.my;
   const mx = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft') + smx;
@@ -760,11 +800,11 @@ function sampleState() {
     const p = a.Um.get(u[0]);
     return { id: u[0], team: u[1], x: p ? lerp(p[2], u[2], f) : u[2], y: p ? lerp(p[3], u[3], f) : u[3], a: p ? lerpAng(p[4], u[4], f) : u[4],
       hp: u[5], max: u[6], w: u[7], carry: u[8], kind: u[9], owner: u[10], moving: u[11], ammo: u[12], shield: u[13],
-      hull: p ? lerpAng(p[14], u[14], f) : u[14], anim: u[15], rage: u[16], elite: u[17] };
+      hull: p ? lerpAng(p[14], u[14], f) : u[14], anim: u[15], rage: u[16], elite: u[17], lord: u[18], lift: u[19] || 0, neutral: u[20] };
   });
   const crates = b.C.map(c => {
     const p = a.Cm.get(c[0]);
-    return { id: c[0], x: p ? lerp(p[1], c[1], f) : c[1], y: p ? lerp(p[2], c[2], f) : c[2], z: p ? lerp(p[3], c[3], f) : c[3], pad: c[4] };
+    return { id: c[0], x: p ? lerp(p[1], c[1], f) : c[1], y: p ? lerp(p[2], c[2], f) : c[2], z: p ? lerp(p[3], c[3], f) : c[3], pad: c[4], metal: c[5], washed: c[6] };
   });
   const bullets = b.B.map(bl => {
     const p = a.Bm.get(bl[0]);
@@ -1092,15 +1132,18 @@ function buildWorld() {
     geo: {
       crate: new THREE.BoxGeometry(CRATE, meta.map.crateH, CRATE),
       sphere: new THREE.SphereGeometry(1, 16, 10),
+      metalBand: new THREE.BoxGeometry(CRATE + 1, 5, CRATE + 1),
+      metalCross: new THREE.BoxGeometry(5, meta.map.crateH + 1, CRATE + 1),
       blob: new THREE.CircleGeometry(1, 14).rotateX(-Math.PI / 2),
       ring: new THREE.RingGeometry(0.82, 1, 48),
       bullet: new THREE.BoxGeometry(1, 1, 1),
       rocket: new THREE.CylinderGeometry(2.2, 2.2, 12, 10).rotateZ(Math.PI / 2),
     },
     mat: {},
-    units: new Map(), crates: new Map(), bullets: new Map(), pickups: new Map(), meteors: new Map(), hq: [],
+    units: new Map(), crates: new Map(), bullets: new Map(), pickups: new Map(), meteors: new Map(), airdrops: new Map(), hq: [],
     root: new THREE.Group(), mapId: meta.map.id,
   };
+  W.arenaView = new ArenaEventView(scene, spawnP, () => Q, hAt);
   scene.add(W.root);
   const th = theme();
   SKY.set(th.sky); scene.fog.color.copy(SKY);
@@ -1123,6 +1166,8 @@ function buildWorld() {
   W.mat.white = new THREE.MeshBasicMaterial({ color: '#ffffff' });
   W.mat.black = new THREE.MeshBasicMaterial({ color: '#0b0b0b' });
   W.mat.metal = new THREE.MeshStandardMaterial({ color: '#5a616b', roughness: 0.45, metalness: 0.6 });
+  W.mat.neutralPaint = new THREE.MeshStandardMaterial({ color: '#8b929b', metalness: 0.6, roughness: 0.5 });
+  W.mat.metalCrate = new THREE.MeshStandardMaterial({ color: '#a8b3c1', metalness: 0.8, roughness: 0.35 });
   W.mat.metalLight = new THREE.MeshStandardMaterial({ color: '#7d8590', roughness: 0.4, metalness: 0.6 });
   W.mat.gunBody = new THREE.MeshStandardMaterial({ color: '#1d1f24', roughness: 0.5, metalness: 0.5 });
   W.mat.guns = WCOL.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.4, metalness: 0.3 }));
@@ -1236,7 +1281,8 @@ function buildWorld() {
 // buang dunia lama (saat ganti peta) termasuk geometri/tekstur GPU-nya
 function disposeWorld() {
   if (!world) return;
-  for (const pool of [world.units, world.crates, world.bullets, world.pickups, world.meteors]) for (const o of pool.values()) scene.remove(o);
+  world.arenaView.dispose();
+  for (const pool of [world.units, world.crates, world.bullets, world.pickups, world.meteors, world.airdrops]) for (const o of pool.values()) { scene.remove(o); disposeEncounter(o); }
   for (const B of booms) scene.remove(B.ball, B.ring);
   booms.length = 0; particles.length = 0;
   scene.remove(world.root);
@@ -1332,7 +1378,7 @@ function makeTurret(u) {
 // Kendaraan: badan (hull) berputar ke arah gerak, kepala/senjata (head) ke arah bidikan
 function makeVehicle(u) {
   const M = world.mat, root = new THREE.Group(), hull = new THREE.Group(), head = new THREE.Group();
-  const paint = M.vehPaint[u.team];
+  const paint = u.team < 0 ? M.neutralPaint : M.vehPaint[u.team];
   const d = { hull, head, wheels: [], treads: null, spin: 0 };
   if (u.kind === K_TANK) {
     const t1 = M.tread.clone(), t2 = M.tread.clone(); // tiap rantai punya offset UV sendiri
@@ -1432,12 +1478,14 @@ function sync(pool, list, keyOf, make, update) {
   }
   for (const [k, o] of pool) if (!seen.has(k)) {
     scene.remove(o);
+    disposeEncounter(o);
     pool.delete(k);
   }
 }
 
 function updateWorld(S, me, dt) {
   const W = world;
+  W.arenaView.update(latest.A, Math.max(0, (performance.now() - latest.rt) / 1000), time, dt, meta.map);
   // markas
   meta.map.bases.forEach((b, t) => {
     const H = W.hq[t], alive = latest.al[t];
@@ -1452,10 +1500,11 @@ function updateWorld(S, me, dt) {
     }
   });
   // unit
-  sync(W.units, S.units, u => u.id + ':' + u.kind,
-    u => (u.kind === 2 ? makeTurret(u) : u.kind === K_MON ? makeMonster() : isVeh(u) ? makeVehicle(u) : makeBuddy(u)), (o, u) => {
+  sync(W.units, S.units, u => [u.id, u.kind, u.team, u.lord || 0].join(':'),
+    u => (u.kind === K_UFO ? makeUfo() : u.kind === K_CHICKEN ? makeChicken() : u.kind === K_LORD || u.lord ? makeLord(u, u.kind === K_LORD ? '#37d9ed' : tcol(u.team)) : u.kind === 2 ? makeTurret(u) : u.kind === K_MON ? makeMonster() : isVeh(u) ? makeVehicle(u) : makeBuddy(u)), (o, u) => {
     const a = me && u.id === me.id ? aim : u.a;
-    o.position.set(u.x, hAt(u.x, u.y), u.y);
+    o.position.set(u.x, hAt(u.x, u.y) + u.lift, u.y);
+    if (u.kind === K_UFO || u.kind === K_CHICKEN || u.kind === K_LORD || u.lord) { animateEncounter(o, u, a, time, dt); return; }
     if (u.kind === 2) { o.userData.head.rotation.y = -a; return; }
     if (u.kind === K_MON) { animMonster(o.userData, u, a, dt); return; }
     if (isVeh(u)) {
@@ -1479,10 +1528,14 @@ function updateWorld(S, me, dt) {
     if (u.shield) W.mat.shield.opacity = 0.2 + Math.sin(time * 20) * 0.1;
   });
   // peti
-  sync(W.crates, S.crates, c => c.id, () => {
+  sync(W.crates, S.crates, c => c.id + (c.metal ? ":metal" : ":wood"), c => {
     const g = new THREE.Group();
-    const m = new THREE.Mesh(W.geo.crate, W.mat.crate); m.castShadow = m.receiveShadow = true;
+    const m = new THREE.Mesh(W.geo.crate, c.metal ? W.mat.metalCrate : W.mat.crate); m.castShadow = m.receiveShadow = true;
     const s = blob(20);
+    if (c.metal) {
+      const band = new THREE.Mesh(W.geo.metalBand, W.mat.metal); m.add(band);
+      const cross = new THREE.Mesh(W.geo.metalCross, W.mat.metal); m.add(cross);
+    }
     g.add(m, s); g.userData = { m, s };
     return g;
   }, (g, c) => {
@@ -1494,6 +1547,7 @@ function updateWorld(S, me, dt) {
     const fall = !c.pad && c.z > 60;
     m.rotation.set(fall ? Math.sin(c.id) * 0.3 : 0, fall ? c.z * 0.01 + c.id : 0, fall ? Math.cos(c.id) * 0.3 : 0);
   });
+  sync(W.airdrops, latest.D || [], d => d[0], makeAirdrop, (o, d) => animateAirdrop(o, d, hAt, meta.colors, time));
   // senjata tergeletak
   sync(W.pickups, S.pickups, p => p[0], p => {
     const g = new THREE.Group();
@@ -1723,12 +1777,13 @@ function frame() {
   });
   for (const u of S.units) {
     const isMe = me && u.id === me.id;
-    const mon = u.kind === K_MON;
-    const p = toScreen(u.x, hAt(u.x, u.y) + (mon ? 100 : u.kind === 2 ? 36 : isVeh(u) ? 44 : u.carry ? 82 : 56), u.y);
+    const mon = u.kind === K_MON, lord = u.kind === K_LORD || u.lord;
+    const p = toScreen(u.x, hAt(u.x, u.y) + u.lift + (u.kind === K_UFO ? 250 : lord ? (u.kind === K_LORD ? 170 : 115) : mon ? 100 : u.kind === 2 ? 36 : isVeh(u) ? 44 : u.carry ? 82 : 56), u.y);
     if (!p) continue;
-    if (mon) hpBar(p.x, p.y + 6, 80, u.hp / u.max, u.rage ? '#ff5a3a' : MON_COL);
+    if (lord || u.kind === K_UFO) hpBar(p.x, p.y + 6, 85, u.hp / u.max, lord ? '#58e5ff' : '#a7ff69');
+    else if (mon) hpBar(p.x, p.y + 6, 80, u.hp / u.max, u.rage ? '#ff5a3a' : MON_COL);
     else if (u.hp < u.max) hpBar(p.x, p.y + 6, 30, u.hp / u.max);
-    const name = mon ? (u.rage ? 'MONSTER (MENGAMUK)' : 'MONSTER') : u.kind === 0 || (isVeh(u) && u.owner) ? names.get(u.owner) : '';
+    const name = u.kind === K_UFO ? 'UFO · TEMBAK UNTUK MENOLONG' : lord ? (u.kind === K_LORD ? 'LORD' : (names.get(u.owner) || 'Buddy') + ' · LORD') : u.neutral ? 'TANK NETRAL · SENTUH UNTUK KLAIM' : mon ? (u.rage ? 'MONSTER (MENGAMUK)' : 'MONSTER') : u.kind === 0 || (isVeh(u) && u.owner) ? names.get(u.owner) : '';
     if (name) {
       ctx.font = `${mon ? 900 : 700} ${mon ? 13 : 11}px system-ui`; ctx.textAlign = 'center';
       ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.strokeText(name, p.x, p.y);
@@ -1824,7 +1879,10 @@ function drawHUD(S, me, dt) {
     const enemyPad = map.bases.some((o, t) => t !== myTeam && latest.pad[t] > 0 && Math.hypot(me.x - o.pad.x, me.y - o.pad.y) < 72);
     // kendaraan kosong milik tim di dekat pemain
     const ride = me.kind === 0 && S.units.find(v => isVeh(v) && v.team === myTeam && !v.owner && Math.hypot(v.x - me.x, v.y - me.y) < 46);
-    if (me.carry) hint = dPad < 72 ? 'E  taruh peti di petak yang dibidik   ·   R  buku resep' : 'E  jatuhkan   ·   F / klik kanan  lempar   ·   bawa ke pad markasmu';
+    if (me.lift) hint = 'DICULIK UFO! Temanmu bisa menembak piring terbang untuk menolong.';
+    else if (me.lord) hint = 'LORD · Klik / RT = tebas · tidak bisa ambil peti · buff hilang saat mati';
+    else if (me.carry && S.crates.find(c => c.metal && c.z > 35 && c.z < 55 && Math.hypot(c.x - me.x, c.y - me.y) < 10)) hint = 'PETI METAL · F / klik kanan = lempar, pecah jadi 2 peti kayu';
+    else if (me.carry) hint = dPad < 72 ? 'E  taruh peti di petak yang dibidik   ·   R  buku resep' : 'E  jatuhkan   ·   F / klik kanan  lempar   ·   bawa ke pad markasmu';
     else if (dPad < 84 && padN > 0) {
       const want = latest.or ? latest.or[myTeam][3] : 0, plan = latest.or ? PLAN_NAME[latest.or[myTeam][0]] : '';
       const pr = latest.pr ? latest.pr[myTeam] : '';
@@ -1833,6 +1891,7 @@ function drawHUD(S, me, dt) {
     }
     else if (isVeh(me)) hint = `E  keluar dari ${VNAME[me.kind]}`;
     else if (ride) hint = `E  naik ${VNAME[ride.kind]}`;
+    else if (S.pickups.some(p => Math.hypot(p[1] - me.x, p[2] - me.y) < 27)) hint = 'E  ambil / tukar senjata';
     else if (loose) hint = 'E  angkat peti';
     else if (enemyPad) hint = 'E  curi peti musuh!';
   }
@@ -1868,8 +1927,11 @@ function drawHUD(S, me, dt) {
     else { const r = u.kind === K_MON ? 5 : u.kind === 0 ? 3 : 2; ellipse(mx + u.x * k, my + u.y * k, r, r); ctx.fill(); }
     if (me && u.id === me.id) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke(); }
   }
+  for (const d of latest.D || []) { ctx.fillStyle = d[4] >= 0 ? meta.colors[d[4]] : '#eee'; ctx.fillRect(mx + d[1] * k - 3, my + d[2] * k - 3, 6, 6); }
   ctx.strokeStyle = '#ff3b30'; ctx.lineWidth = 1.5;
   for (const m of latest.M || []) { ellipse(mx + m[1] * k, my + m[2] * k, Math.max(2.5, m[4] * k), Math.max(2.5, m[4] * k)); ctx.stroke(); }
+
+  if (latest.A) drawArenaMinimap(ctx, latest.A, latest.A.age + Math.max(0, (performance.now() - latest.rt) / 1000), mx, my, k, map);
 
   // feed
   let fy = my + mh + 20;

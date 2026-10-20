@@ -5,6 +5,8 @@ peti jatuh dari langit → angkat & bawa ke pad markas → susun → rakit senja
 
 Semua aset (grafis & suara) dibuat sendiri (digambar lewat kode & disintesis), **tanpa file dari disk asli**, jadi proyek ini aman disimpan di GitHub dan dibagikan ke teman.
 
+**Patch notes Chaos & Loot (20 Oktober 2026)** tersedia dari kartu **Chaos & Loot** di dashboard/lobby, tombol **Patch notes** di panel perintah saat bermain, atau **Update** di menu sentuh. Panel mencakup seluruh event baru, loot monster, peti metal, dan aturan LORD. Panduan detail: [Event & loot](docs/EVENTS.md).
+
 ## Cara menjalankan
 
 Butuh **Node.js 18+** (`brew install node` atau dari nodejs.org). Tidak ada `npm install`; satu-satunya library (three.js, MIT) sudah disertakan di `public/vendor/`, jadi tetap jalan tanpa internet. Browser harus mendukung WebGL.
@@ -14,6 +16,7 @@ cd team-buddies
 node server.js            # 2 tim
 TEAMS=4 node server.js    # 4 tim (Merah, Biru, Hijau, Kuning)
 PORT=3000 node server.js  # ganti port
+EVENT_PREVIEW=ufo,airdrop,chickens,lord node server.js # preview event berurutan; mulai 8 detik setelah Siap
 ```
 
 Terminal akan menampilkan alamat:
@@ -57,8 +60,8 @@ Di macOS, saat pertama kali jalan akan muncul dialog firewall *"Allow incoming c
 
 * **Bukit**: bisa didaki (gerak 22% lebih lambat), tapi dari atas bukit peluru terbang sampai 30% lebih jauh.
 * **Lubang**: masuk = tewas (unit, kendaraan beserta pengemudinya, dan peti yang dilempar ke dalamnya). Bot menghindarinya; terpental hantaman monster bisa menjatuhkanmu ke lubang.
-* **Monster penjaga** ada di setiap peta, berkeliaran di zona jatuh peti dan menyerang unit tim mana pun yang masuk zona: hantaman tanah (area, memantulkan) dan lemparan batu. Ada ancang-ancang sebelum menyerang, jadi bisa dihindari. HP 1500; bila dikalahkan menjatuhkan 4 peti dan muncul lagi 45 detik kemudian.
-* **Event acak** tiap 45–75 detik, diumumkan di tengah layar: **Hujan meteor** (7–10 meteor, sebagian mengincar unit, lingkaran merah = peringatan; meteor juga merusak markas), **Kiriman peti** (10 peti jatuh di seluruh peta), **Monster mengamuk** (15 detik lebih cepat & kuat).
+* **Monster penjaga** ada di setiap peta, berkeliaran di zona jatuh peti dan menyerang unit tim mana pun yang masuk zona: hantaman tanah (area, memantulkan) dan lemparan batu. Ada ancang-ancang sebelum menyerang, jadi bisa dihindari. HP 1500; bila dikalahkan menjatuhkan 8 peti (2 metal) + Bazooka, Minigun, dan Laser dan muncul lagi 45 detik kemudian.
+* **Event acak** tiap 45–75 detik, diumumkan di tengah layar: **Hujan meteor** (7–10 meteor, sebagian mengincar unit, lingkaran merah = peringatan; meteor juga merusak markas), **Kiriman peti** (10 peti jatuh di seluruh peta), **Monster mengamuk** (15 detik lebih cepat & kuat), **Blackhole**, **Naga**, **Tsunami**, **UFO penculik**, **Helikopter Airdrop**, **Invasi Ayam**, dan **LORD**. Bencana besar tidak bertumpuk. Lihat [panduan bencana](docs/EVENTS.md) untuk waktu peringatan, efek, dan cara selamat.
 * HP markas 3200 (turun 20% dari 4000).
 
 **Ruang tunggu**: setelah memasukkan nama, semua pemain masuk ruang tunggu (klik kolom tim untuk pindah tim). Ronde baru dimulai (hitung mundur 3 detik) saat **semua** pemain menekan **SIAP**; batal siap menghentikan hitung mundur. Setiap tim mulai **tanpa Buddy** — hanya pemainnya. Opsi *Isi tim kosong dengan CPU* (bawaan aktif): tim tanpa pemain mendapat 1 komandan CPU yang mengumpulkan peti & merakit, dan muncul lagi bila tewas; bila dimatikan, tim kosong langsung gugur (butuh pemain di minimal 2 tim). Selesai ronde, semua kembali ke ruang tunggu.
@@ -118,7 +121,11 @@ Tim tanpa pemain manusia dimainkan komandan CPU (mengumpulkan peti, merakit, men
 | File | Isi |
 |---|---|
 | `server.js` | HTTP statis + WebSocket minimal (RFC 6455) + loop 30 Hz |
-| `server/game.js` | seluruh logika game |
+| `server/game.js` | simulasi game dan penjadwalan event |
+| `server/arena-events.js` | rotasi event, fisika bencana, distribusi loot simetris, dan tujuan menghindar bot |
+| `server/encounters.js` | UFO, ayam, LORD, airdrop, loot monster, peti metal |
+| `public/encounters.js` | model dan animasi prosedural UFO, ayam, LORD, helikopter, dan paket airdrop |
+| `public/arena-events.js` | visual 3D prosedural dan penanda minimap bencana |
 | `public/index.html`, `style.css` | lobby |
 | `public/client.js` | render 3D, tekstur prosedural, input, interpolasi, HUD, suara |
 | `public/vendor/three.module.min.js` | three.js r160 (MIT, lisensi di `LICENSE-three.txt`) |
@@ -182,8 +189,21 @@ Ghidra 12.1.x + JDK 21 diperlukan untuk analisis native (`brew install --cask te
 - [x] Lebih banyak senjata (Sniper, Pelontar api, Pelontar granat, Minigun, Laser) & Buddy Elit
 - [x] Room master (pilih peta, CPU, keluarkan pemain) & chat semua/tim
 - [x] Beberapa peta (bukit, lubang, monster penjaga, event acak)
+- [x] Bencana Blackhole, Naga, Tsunami dengan warning, counterplay, dan peti hadiah
+- [x] UFO, Helikopter Airdrop, Invasi Ayam, LORD, peti metal, loot monster, dan distribusi tsunami seimbang
 - [ ] Editor peta sederhana
 - [x] Kontrol gamepad (Gamepad API) & sentuh untuk HP
 - [ ] Mode Capture-the-crate / Deathmatch
 - [x] Ekstraktor `.TIM → PNG` untuk riset referensi (lokal saja) — `tools/psx/tim2png.py`
 - [ ] Tentukan alamat muat overlay (`GAME.BIN` dll.) agar bisa dianalisis REA/Ghidra
+
+
+## Verifikasi
+
+Tes simulasi menggunakan test runner bawaan Node, tanpa `npm install`:
+
+```bash
+node --test
+```
+
+Cakupan: fase peringatan, gaya tarik dan massa, lengkungan peluru, jalur api, perlindungan bukit, damage tsunami sekali per unit, hadiah peti, tabrakan, bot menghindar, sinkronisasi pemain baru, reset ronde, penculikan/penyelamatan UFO, klaim airdrop, invasi ayam, buff LORD tanpa transfer saat mati, peti metal, loot monster, serta semua event di setiap peta untuk 2 dan 4 tim.

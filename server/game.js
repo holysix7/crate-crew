@@ -1,6 +1,9 @@
 'use strict';
 // Simulasi game authoritative. Semua aturan main ada di sini; client hanya menggambar.
 
+const { ArenaEvents, EVENT_RULES } = require('./arena-events');
+const { Encounters } = require('./encounters');
+
 const T = 40, MW = 48, MH = 36, W = MW * T, H = MH * T;
 const TICK = 1 / 30;
 const TEAM_NAMES = ['Merah', 'Biru', 'Hijau', 'Kuning'];
@@ -21,8 +24,10 @@ const WEAPONS = {
   minigun: { label: 'Minigun', rate: 0.05, dmg: 5,  speed: 820, spread: 0.16, pellets: 1, ammo: 200, life: 0.55 },
   laser:   { label: 'Laser', rate: 0.45, dmg: 30, speed: 1600, spread: 0,   pellets: 1, ammo: 12,  life: 0.4, pierce: true, fx: 5 },
 };
+WEAPONS.superbazooka = { label: 'Super Bazooka', rate: 1.4, dmg: 125, speed: 470, spread: 0, pellets: 1, ammo: 6, life: 1.5, rocket: true, splash: 105 };
+WEAPONS.lordblade = { label: 'Tebasan LORD', rate: 0.7, dmg: 32, speed: 0, spread: 0, pellets: 0, ammo: Infinity, life: 0 };
 const WLIST = Object.keys(WEAPONS);
-const KIND = { human: 0, bot: 1, turret: 2, tank: 3, jeep: 4, monster: 5 };
+const KIND = { human: 0, bot: 1, turret: 2, tank: 3, jeep: 4, monster: 5, ufo: 6, chicken: 7, lord: 8 };
 const UNIT_R = 14, HQ_HP = 3200, UNIT_HP = 100, TURRET_HP = 260, CRATE_H = 24, CARRY_Z = 44;
 const MAX_TEAM_UNITS = 8, MAX_TURRETS = 3, MAX_VEHICLES = 2, ROUND_TIME = 600, RESPAWN = 4;
 // Kendaraan rakitan 8 peti. r < T/2 supaya muat lewat celah 1 petak; turn = rad/detik; ram = damage tabrak
@@ -34,7 +39,7 @@ const VEHICLES = {
 const MONSTER = { hp: 1500, r: 30, speed: 85, zone: 9.4 * T, slam: 45, slamR: 80, rock: 40, respawn: 45 };
 const ZONE_R = 9.4 * T;
 const isInf = u => u.kind === 'human' || u.kind === 'bot';
-const mass = u => (u.kind === 'turret' ? Infinity : u.kind === 'monster' ? 30 : VEHICLES[u.kind] ? VEHICLES[u.kind].mass : 1);
+const mass = u => (u.kind === 'turret' || u.neutral ? Infinity : u.kind === 'monster' ? 30 : u.lord || u.kind === 'lord' ? 4 : VEHICLES[u.kind] ? VEHICLES[u.kind].mass : 1);
 
 // Peta: koordinat dalam petak untuk SATU kuadran (kiri atas), lalu dicerminkan ke 4 kuadran.
 // walls [x,y,w,h] · hills [x,y,r,tinggiPx] (bisa dilewati, memperlambat, menambah jarak tembak) · pits [x,y,r] (jatuh = tewas)
@@ -149,7 +154,9 @@ function buildMap(teams, def) {
 }
 
 class Game {
-  constructor(teams) {
+  constructor(teams, { firstEvent = null } = {}) {
+    this.previewEvents = (Array.isArray(firstEvent) ? firstEvent : [firstEvent]).filter(k => Object.hasOwn(EVENT_RULES, k));
+    this.firstEvent = this.previewEvents[0] || null;
     this.teams = teams;
     this.players = new Map();
     this.conns = new Set();
@@ -183,6 +190,7 @@ class Game {
   welcome() {
     return JSON.stringify({
       t: 'welcome', teams: this.teams, colors: TEAM_COLORS.slice(0, this.teams), names: TEAM_NAMES.slice(0, this.teams), weapons: WLIST,
+      arenaEvents: EVENT_RULES,
       map: this.mapInfo(), maps: MAPS.map(m => ({ id: m.id, name: m.name })), hqMax: HQ_HP,
       wlabels: WLIST.map(k => WEAPONS[k].label), recipes: RECIPES.map(({ id, name, desc, lo, hi }) => ({ id, name, desc, lo, hi })),
     });
@@ -202,14 +210,18 @@ class Game {
     this.orders = this.bases.map(() => ({ build: 'auto', mode: 'follow', target: -1 }));
     this.cpuTeam = this.bases.map(() => false); this.cpuRespawn = this.bases.map(() => 0);
     this.endTimer = 0; this.winner = -1; this.roundLeft = ROUND_TIME; this.crateTimer = 0.5; this.countdown = 0;
-    this.meteors = []; this.evtTimer = rand(40, 55); this.monsterTimer = 0;
+    this.encounters = new Encounters(this, WEAPONS);
+    this.arenaEvents = new ArenaEvents(this);
+    this.previewQueue = [...this.previewEvents];
+    this.pendingFirstEvent = this.previewQueue.shift() || null;
+    this.meteors = []; this.evtTimer = this.pendingFirstEvent ? 8 : rand(40, 55); this.monsterTimer = 0;
   }
   // ruang tunggu: dunia kosong, semua pemain harus menekan "Siap" lagi
   toLobby() {
     this.clearWorld();
     this.state = 'lobby';
     for (const p of this.players.values()) { p.ready = false; p.unitId = 0; }
-    for (let i = 0; i < 6; i++) this.spawnCrate(true);
+    for (let i = 0; i < 10; i++) this.spawnCrate(true);
   }
   humanTeams() { return new Set([...this.players.values()].map(p => p.team)); }
   activeTeams() { return this.cpu ? this.teams : this.humanTeams().size; }
@@ -224,7 +236,7 @@ class Game {
       if (this.cpu) { this.cpuTeam[t] = true; this.spawnCpu(t); }
       else { this.alive[t] = false; this.hq[t] = 0; }
     }
-    for (let i = 0; i < 6; i++) this.spawnCrate(true);
+    for (let i = 0; i < 10; i++) this.spawnCrate(true);
     this.spawnMonster();
     this.events.push({ k: 'start' });
   }
@@ -433,6 +445,9 @@ class Game {
     if (u.kind === 'human') { const p = this.players.get(u.owner); return p ? p.name : '?'; }
     if (u.cpu) return 'CPU ' + TEAM_NAMES[u.team];
     if (u.kind === 'monster') return 'Monster';
+    if (u.kind === 'lord') return 'LORD';
+    if (u.kind === 'chicken') return 'Ayam';
+    if (u.kind === 'ufo') return 'UFO';
     if (VEHICLES[u.kind]) {
       const p = u.driver && this.players.get(u.driver.owner);
       return p ? p.name + ' (' + VEHICLES[u.kind].label + ')' : VEHICLES[u.kind].label + ' ' + TEAM_NAMES[u.team];
@@ -442,7 +457,10 @@ class Game {
   removeUnit(u) {
     if (u.carry) {
       const c = this.crates.get(u.carry);
-      if (c) { c.state = 'ground'; c.z = 0; c.x = u.x; c.y = u.y; }
+      if (c) {
+        if (this.inPit(u.x, u.y)) this.crates.delete(c.id);
+        else { c.state = 'ground'; c.z = 0; c.x = u.x; c.y = u.y; }
+      }
       u.carry = 0;
     }
     this.units.delete(u.id);
@@ -453,11 +471,14 @@ class Game {
       const ang = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 9 * T;
       const x = wide ? rand(2 * T, W - 2 * T) : W / 2 + Math.cos(ang) * r, y = wide ? rand(2 * T, H - 2 * T) : H / 2 + Math.sin(ang) * r;
       if (this.solids.some(s => inRect(x, y, s, 24)) || this.inPit(x, y, -30)) continue;
-      const c = { id: this.id(), x, y, z: instant ? 0 : 560, vx: 0, vy: 0, vz: 0, state: instant ? 'ground' : 'air', thrown: false, team: -1, by: 0, hit: false };
-      this.crates.set(c.id, c);
-      return c;
+      return this.createCrate(x, y, { metal: Math.random() < 0.22, z: instant ? 0 : 560, state: instant ? 'ground' : 'air', hit: false });
     }
   }
+  createCrate(x, y, options = {}) {
+    const c = { id: this.id(), x, y, z: 50, vx: 0, vy: 0, vz: 0, state: 'air', thrown: false, team: -1, by: 0, hit: true, metal: false, ...options };
+    this.crates.set(c.id, c); return c;
+  }
+  tip(u, txt) { if (u.owner) this.events.push({ k: 'tip', p: u.owner, txt }); }
   padCount(t) { let n = 0; for (const id of this.pads[t]) if (id) n++; return n; }
   padMask(t) { return this.pads[t].reduce((m, id, i) => (id ? m | (1 << i) : m), 0); }
   // petak untuk peti yang ditaruh pemain: kolom yang dibidik dulu, lalu kolom terdekat; tingkat 2 hanya di atas peti
@@ -478,7 +499,8 @@ class Game {
 
   // ---------------- aksi pemain ----------------
   action(u, k, col = -1) {
-    if (u.kind === 'turret' || !this.units.has(u.id)) return;
+    if (u.kind === 'turret' || u.abducted || !this.units.has(u.id)) return;
+    if (u.lord || u.kind === 'lord') { this.tip(u, 'LORD bertarung melee dan tidak bisa mengambil peti atau naik kendaraan.'); return; }
     if (VEHICLES[u.kind]) { // pengemudi: E keluar, Q tetap bisa merakit (kecuali senjata)
       if (k === 'grab') this.exitVehicle(u);
       else if (k === 'build') this.build(u);
@@ -489,9 +511,11 @@ class Game {
     else if (k === 'build') this.build(u);
   }
   grab(u, col = -1) {
+    if (u.lord || u.abducted) return;
     const b = this.bases[u.team];
     if (u.carry) {
       const c = this.crates.get(u.carry);
+      if (c?.metal && dist(u, b.pad) < 72) { this.tip(u, 'Peti metal: lempar dengan F agar pecah menjadi 2 peti kayu.'); return; }
       u.carry = 0;
       if (!c) return;
       const pad = this.pads[u.team];
@@ -508,6 +532,12 @@ class Game {
         if (this.inPit(c.x, c.y)) this.crates.delete(c.id); // jatuh ke lubang
       }
       return;
+    }
+    // E menukar senjata loot meski senjata lama belum habis.
+    for (const pk of this.pickups.values()) if (Math.hypot(pk.x - u.x, pk.y - u.y) < 27) {
+      this.pickups.delete(pk.id);
+      if (u.weapon !== 'pistol') { const old = this.encounters.dropWeapon(u.x + 32, u.y, u.weapon, 20); if (old) old.ammo = u.ammo; }
+      u.weapon = pk.w; u.ammo = pk.ammo; return;
     }
     // ambil peti di tanah terdekat
     let best = null, bd = 44;
@@ -541,6 +571,7 @@ class Game {
   }
   // Unit pemain disimpan di kendaraan (keluar dari daftar unit); input pemain diarahkan ke kendaraan
   board(u, v) {
+    if (u.lord || u.abducted || v.neutral || u.team !== v.team) return;
     this.units.delete(u.id);
     v.driver = u; v.owner = u.owner; v.ai.path = null;
     const p = this.players.get(u.owner);
@@ -595,6 +626,7 @@ class Game {
     return p.what === 'weapon' ? (p.w ? WEAPONS[p.w].label : 'Senjata acak') : BUILD_LABEL[p.what];
   }
   build(u) {
+    if (u.lord || u.abducted) return;
     const b = this.bases[u.team];
     if (dist(u, b.pad) > 84) return;
     const pad = this.pads[u.team];
@@ -643,6 +675,8 @@ class Game {
 
   // ---------------- tembak & damage ----------------
   fire(u) {
+    if (u.abducted || u.neutral) return;
+    if (u.lord || u.lordBoss) { this.encounters.melee(u); return; }
     const w = WEAPONS[u.weapon];
     const player = u.kind === 'human' || !!u.driver;
     u.cd = w.rate * (u.kind === 'bot' || (VEHICLES[u.kind] && !player) ? 1.6 : 1);
@@ -656,13 +690,14 @@ class Game {
     if (u.ammo !== Infinity && --u.ammo <= 0) { u.weapon = 'pistol'; u.ammo = Infinity; }
   }
   damage(u, dmg, attackerId) {
-    if (!this.units.has(u.id) || u.shield > 0) return;
+    if (!this.units.has(u.id) || u.shield > 0 || u.neutral || u.abducted) return;
     if (attackerId) { u.lastHit = attackerId; u.lastHitT = this.time; } // untuk kredit bila nanti jatuh ke lubang
     u.hp -= dmg;
     if (u.hp <= 0) this.kill(u, attackerId);
   }
   kill(u, attackerId, fell = false) {
-    if (u.weapon !== 'pistol' && isInf(u) && !fell) {
+    if (!this.units.has(u.id)) return;
+    if (!u.lord && u.weapon !== 'pistol' && isInf(u) && !fell) {
       this.pickups.set(this.id(), { id: this.nextId - 1, x: u.x, y: u.y, w: u.weapon, ammo: u.ammo, ttl: 20 });
     }
     if (VEHICLES[u.kind]) {
@@ -672,18 +707,13 @@ class Game {
       if (h) { h.hp = Math.min(h.hp, 40); if (fell) { h.x = u.x; h.y = u.y; this.kill(h, attackerId, true); } }
     }
     if (u.kind === 'monster') {
-      // hadiah: monster menjatuhkan 4 peti, lalu muncul lagi
-      for (let i = 0; i < 4; i++) {
-        const a = (i / 4) * Math.PI * 2;
-        const c = { id: this.id(), x: u.x + Math.cos(a) * 45, y: u.y + Math.sin(a) * 45, z: 40, vx: Math.cos(a) * 120, vy: Math.sin(a) * 120, vz: 260,
-          state: 'air', thrown: false, team: -1, by: 0, hit: true };
-        this.crates.set(c.id, c);
-      }
       this.monsterTimer = MONSTER.respawn;
-      this.events.push({ k: 'evt', name: 'Monster tumbang!', d: `4 peti jatuh · muncul lagi dalam ${MONSTER.respawn} detik` });
+      this.events.push({ k: 'evt', name: 'Monster tumbang!', d: `8 peti (2 metal) + Bazooka, Minigun, Laser! Kembali dalam ${MONSTER.respawn} detik.` });
     }
+    const carriedCrate = u.carry;
     this.removeUnit(u);
     const killer = this.units.get(attackerId);
+    this.encounters.onKill(u, killer, fell, carriedCrate);
     this.events.push({ k: 'kill', a: killer ? this.unitName(killer) : '', ta: killer ? killer.team : -1, b: this.unitName(u), tb: u.team, x: r1(u.x), y: r1(u.y), f: fell ? 1 : 0 });
     if (u.kind === 'human') {
       const p = this.players.get(u.owner);
@@ -773,10 +803,14 @@ class Game {
     this.bullets.push({ id: this.id(), x: u.x + ((tx - u.x) / d) * (u.r + 6), y: u.y + ((ty - u.y) / d) * (u.r + 6), vx: ((tx - u.x) / d) * sp, vy: ((ty - u.y) / d) * sp,
       team: -1, dmg: MONSTER.rock, life: d / sp, rocket: true, rock: true, splash: 55, owner: u.id });
   }
-  randomEvent() {
+  // Pemilihan paksa hanya untuk tes lokal; tidak ada perintah event dari client.
+  randomEvent(forced = null) {
     const mon = this.monster();
-    const opts = ['meteor', 'meteor', 'supply', ...(mon ? ['rage'] : [])];
-    const k = opts[(Math.random() * opts.length) | 0];
+    if (this.state !== 'playing' || this.arenaEvents.active || this.meteors.length || (mon && mon.rage > 0)) return false;
+    const opts = ['meteor', 'meteor', 'supply', ...(mon ? ['rage'] : []), ...Object.keys(EVENT_RULES)];
+    const k = forced || opts[(Math.random() * opts.length) | 0];
+    if (Object.hasOwn(EVENT_RULES, k)) return this.arenaEvents.start(k);
+    if (!opts.includes(k)) return false;
     if (k === 'meteor') {
       // separuh meteor mengincar posisi unit, separuh acak — semuanya diberi tanda peringatan dulu
       const targets = [...this.units.values()].filter(v => v.team >= 0);
@@ -793,6 +827,20 @@ class Game {
     } else {
       mon.rage = 15;
       this.events.push({ k: 'evt', name: 'Monster mengamuk!', d: 'Lebih cepat & lebih kuat selama 15 detik' });
+    }
+    return true;
+  }
+
+  eventMove(body, dx, dy, radius) {
+    const tx = clamp(body.x + dx, T + radius, W - T - radius);
+    const ty = clamp(body.y + dy, T + radius, H - T - radius);
+    const steps = Math.max(1, Math.ceil(Math.hypot(tx - body.x, ty - body.y) / 8));
+    const sx = (tx - body.x) / steps, sy = (ty - body.y) / steps;
+    for (let i = 0; i < steps; i++) {
+      body.x += sx; body.y += sy;
+      for (const s of this.solids) pushOut(body, radius, s);
+      body.x = clamp(body.x, T + radius, W - T - radius);
+      body.y = clamp(body.y, T + radius, H - T - radius);
     }
   }
 
@@ -852,7 +900,7 @@ class Game {
   findEnemy(u, range) {
     let best = null, bd = range;
     for (const v of this.units.values()) {
-      if (v.team === u.team) continue;
+      if (v.team === u.team || v.neutral || v.abducted) continue;
       const d = dist(u, v);
       if (d < bd && this.los(u.x, u.y, v.x, v.y)) { bd = d; best = v; }
     }
@@ -880,7 +928,7 @@ class Game {
         const dPad = dist(u, b.pad);
         if (u.carry) {
           goal = b.pad;
-          if (dPad < 46) { this.action(u, 'grab'); goal = null; }
+          if (dPad < 46) { this.action(u, this.crates.get(u.carry)?.metal ? 'throw' : 'grab'); goal = null; }
         } else if (tgt && (ai.role !== 'gather' || dist(u, tgt) < 230) && !(this.orders[u.team].mode === 'defend' && dist(tgt, b.spawn) > 340)) {
           const d = dist(u, tgt);
           if (d > range * 0.75) goal = tgt;
@@ -935,6 +983,12 @@ class Game {
           }
         }
       }
+      const escape = this.arenaEvents.escapeGoal(u);
+      if (!escape && isInf(u) && !u.carry) {
+        const drop = [...this.encounters.airdrops.values()].filter(d => d.team < 0 && dist(d, u) < 650).sort((a, b) => dist(a, u) - dist(b, u))[0];
+        if (drop) goal = drop;
+      }
+      if (escape) { goal = escape; fire = false; ai.path = null; }
       ai.goal = goal; ai.aim = aim; ai.fire = fire;
     }
 
@@ -1014,14 +1068,17 @@ class Game {
 
     // peti jatuh dari langit
     if ((this.crateTimer -= dt) <= 0) {
-      this.crateTimer = rand(1.6, 2.6);
+      this.crateTimer = rand(1.0, 1.6);
       let loose = 0;
-      for (const c of this.crates.values()) if (c.state === 'ground' || c.state === 'air') loose++;
-      if (loose < 8 + 2 * this.teams) this.spawnCrate();
+      for (const c of this.crates.values()) if (c.state === 'ground' || c.state === 'air' || c.state === 'washed') loose++;
+      if (loose < 18 + 4 * this.teams) this.spawnCrate();
     }
 
     // event acak, meteor, monster muncul lagi
-    if ((this.evtTimer -= dt) <= 0) { this.evtTimer = rand(45, 75); this.randomEvent(); }
+    if ((this.evtTimer -= dt) <= 0 && this.randomEvent(this.pendingFirstEvent)) {
+      this.pendingFirstEvent = this.previewQueue.shift() || null;
+      this.evtTimer = this.pendingFirstEvent ? (this.arenaEvents.active.warn + this.arenaEvents.active.duration + 6) : rand(45, 75);
+    }
     for (const m of this.meteors) if ((m.t -= dt) <= 0) this.explode(m.x, m.y, m.r, 55, -2, 0);
     this.meteors = this.meteors.filter(m => m.t > 0);
     if (!this.monster() && (this.monsterTimer -= dt) <= 0) {
@@ -1030,17 +1087,25 @@ class Game {
     }
 
     for (const u of this.units.values()) {
+      if (u.abducted || u.neutral || u.kind === 'ufo') continue;
       if (u.kind === 'monster') this.thinkMonster(u, dt);
+      else if (u.kind === 'chicken') this.encounters.thinkChicken(u, dt);
+      else if (u.lordBoss || (u.lord && u.ai)) this.encounters.thinkLord(u, dt);
       else if (u.ai && !u.driver) this.think(u, dt);
     }
 
+    this.arenaEvents.tick(dt);
+    this.encounters.tickDrops(dt);
+
     for (const u of this.units.values()) {
+      if (u.abducted || u.fly || u.neutral) { u.moving = false; continue; }
+      if (u.kind !== 'monster' && u.anim > 0) u.anim = Math.max(0, u.anim - dt);
       if (u.kind !== 'turret') {
         let { mx, my } = u.in;
         const l = Math.hypot(mx, my);
         if (l > 1) { mx /= l; my /= l; }
         const veh = VEHICLES[u.kind];
-        let sp = veh ? veh.speed : u.kind === 'monster' ? MONSTER.speed * u.spd : u.carry ? 112 : 165;
+        let sp = veh ? veh.speed : u.kind === 'monster' ? MONSTER.speed * u.spd : u.lordBoss ? 110 : u.lord ? 185 : u.kind === 'chicken' ? 210 : u.carry ? 112 : 165;
         if (u.kind !== 'monster' && this.heightAt(u.x, u.y) > 8) sp *= 0.78; // mendaki bukit lebih lambat
         u.moving = l > 0.1 && sp > 0;
         if (veh && u.moving) {
@@ -1057,14 +1122,14 @@ class Game {
       u.cd -= dt;
       if (u.shield > 0) u.shield -= dt;
       if (u.in.fire && !u.carry && u.cd <= 0) this.fire(u);
-      if (isInf(u) && u.weapon === 'pistol') {
+      if (isInf(u) && !u.lord && u.weapon === 'pistol') {
         for (const pk of this.pickups.values()) {
           if (Math.hypot(pk.x - u.x, pk.y - u.y) < 26) { u.weapon = pk.w; u.ammo = pk.ammo; this.pickups.delete(pk.id); break; }
         }
       }
     }
     // pemisahan antar unit + tabrakan dinding
-    const list = [...this.units.values()];
+    const list = [...this.units.values()].filter(u => !u.abducted && !u.fly);
     for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
       const a = list[i], b = list[j];
       const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), R = a.r + b.r;
@@ -1083,7 +1148,7 @@ class Game {
       if (u.kind === 'monster') {
         // monster terlalu besar untuk jatuh: didorong keluar dari lubang
         for (const p of this.pits) { const d = Math.hypot(u.x - p.x, u.y - p.y) || 1; if (d < p.r + u.r) { u.x = p.x + (u.x - p.x) / d * (p.r + u.r); u.y = p.y + (u.y - p.y) / d * (p.r + u.r); } }
-      } else if (u.kind !== 'turret' && this.units.has(u.id) && this.inPit(u.x, u.y, 6)) {
+      } else if (u.kind !== 'turret' && !u.neutral && this.units.has(u.id) && this.inPit(u.x, u.y, 6)) {
         this.events.push({ k: 'fall', x: r1(u.x), y: r1(u.y) });
         this.kill(u, this.time - (u.lastHitT || -9) < 4 ? u.lastHit : 0, true);
       }
@@ -1097,22 +1162,28 @@ class Game {
         c.x = u.x; c.y = u.y + 1; c.z = CARRY_Z;
       } else if (c.state === 'air') {
         c.vz -= 900 * dt; c.z += c.vz * dt; c.x += c.vx * dt; c.y += c.vy * dt;
-        if (this.solids.some(s => inRect(c.x, c.y, s, 10))) { for (const s of this.solids) pushOut(c, 13, s); c.vx = c.vy = 0; }
+        if (this.solids.some(s => inRect(c.x, c.y, s, 10))) {
+          for (const s of this.solids) pushOut(c, 13, s); c.vx = c.vy = 0;
+          if (c.metal && c.thrown) { this.encounters.splitMetal(c); continue; }
+        }
         if (!c.hit && c.z < 50) {
           for (const u of this.units.values()) {
-            if (c.thrown && u.team === c.team) continue;
+            if (u.fly || u.abducted || u.neutral || (c.thrown && u.team === c.team)) continue;
             if (Math.hypot(u.x - c.x, u.y - c.y) < u.r + 14) {
               c.hit = true; c.vx *= -0.25; c.vy *= -0.25;
               this.events.push({ k: 'bonk', x: r1(u.x), y: r1(u.y) });
-              this.damage(u, c.thrown ? 32 : 25, c.thrown ? c.by : 0);
+              this.damage(u, c.thrown ? (c.metal ? 48 : 32) : 25, c.thrown ? c.by : 0);
+              if (c.metal && c.thrown) this.encounters.splitMetal(c);
               break;
             }
           }
         }
+        if (!this.crates.has(c.id)) continue;
         if (c.z <= 0) {
           c.z = 0; c.vx = c.vy = c.vz = 0; c.state = 'ground';
           c.x = clamp(c.x, T + 14, W - T - 14); c.y = clamp(c.y, T + 14, H - T - 14);
           if (this.inPit(c.x, c.y)) { this.crates.delete(c.id); continue; } // hilang ke dalam lubang
+          if (c.metal && c.thrown) { this.encounters.splitMetal(c); continue; }
           this.events.push({ k: 'land', x: r1(c.x), y: r1(c.y) });
         }
       }
@@ -1161,8 +1232,8 @@ class Game {
 
   snapshot() {
     const U = [], C = [], B = [], P = [], PL = [];
-    for (const u of this.units.values()) U.push([u.id, u.team, r1(u.x), r1(u.y), +u.a.toFixed(2), Math.ceil(u.hp), u.max, WLIST.indexOf(u.weapon), u.carry ? 1 : 0, KIND[u.kind], u.owner, u.moving ? 1 : 0, u.ammo === Infinity ? -1 : u.ammo, u.shield > 0 ? 1 : 0, +u.hull.toFixed(2), u.anim, u.rage > 0 ? 1 : 0, u.elite ? 1 : 0]);
-    for (const c of this.crates.values()) C.push([c.id, r1(c.x), r1(c.y), r1(c.z), c.state === 'pad' ? 1 : 0]);
+    for (const u of this.units.values()) U.push([u.id, u.team, r1(u.x), r1(u.y), +u.a.toFixed(2), Math.ceil(u.hp), u.max, WLIST.indexOf(u.weapon), u.carry ? 1 : 0, KIND[u.kind], u.owner, u.moving ? 1 : 0, u.ammo === Infinity ? -1 : u.ammo, u.shield > 0 ? 1 : 0, +u.hull.toFixed(2), u.anim, u.rage > 0 ? 1 : 0, u.elite ? 1 : 0, u.lord ? 1 : 0, Math.round(u.lift || 0), u.neutral ? 1 : 0]);
+    for (const c of this.crates.values()) C.push([c.id, r1(c.x), r1(c.y), r1(c.z), c.state === 'pad' ? 1 : 0, c.metal ? 1 : 0, c.state === 'washed' ? 1 : 0]);
     // jenis peluru: 0 biasa, 1 roket, 2 batu monster, 3 api, 4 granat, 5 laser
     for (const b of this.bullets) B.push([b.id, r1(b.x), r1(b.y), b.rock ? 2 : b.fx || (b.rocket ? 1 : 0), b.team]);
     for (const p of this.pickups.values()) P.push([p.id, r1(p.x), r1(p.y), WLIST.indexOf(p.w)]);
@@ -1173,6 +1244,7 @@ class Game {
       pm: this.pads.map((_, t) => this.padMask(t)), pr: this.pads.map((_, t) => this.planLabel(t)), ms: this.master,
       or: this.orders.map((o, t) => [o.build, o.mode, o.target, this.buildWant(t)]),
       lb: [this.cpu ? 1 : 0, Math.ceil(this.countdown), this.activeTeams()],
+      A: this.arenaEvents.snapshot(), D: this.encounters.snapshot(),
       M: this.meteors.map(m => [m.id, r1(m.x), r1(m.y), +m.t.toFixed(2), m.r]),
     });
   }
