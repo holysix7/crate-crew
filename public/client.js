@@ -504,6 +504,7 @@ function onEvent(e) {
       if (e.t === myTeam) sfx.build();
       break;
     case 'shatter': burst(e.x, e.y, 15, 16, '#b9d4df', 160, 0.55, 4, 80); sfx.bonk(near(e.x, e.y)); break;
+    case 'trainhit': burst(e.x, e.y, 18, 20, '#ffb25d', 190, 0.7, 5, 100); sfx.bonk(near(e.x, e.y)); shake = Math.max(shake, 7 * near(e.x, e.y)); break;
     case 'slash': burst(e.x + Math.cos(e.a) * e.r * 0.6, e.y + Math.sin(e.a) * e.r * 0.6, 30, 16, '#8cffff', 180, 0.3, 4, 80); sfx.shot(near(e.x, e.y)); break;
     case 'claim': pushFeed(`<b style="color:${tcol(e.t)}">${esc(e.n)}</b> merebut airdrop: Super Bazooka + Tank!`); if (e.t === myTeam) sfx.build(); break;
     case 'tip': if (e.p === myId) { pushFeed(esc(e.txt)); $('action-tip').textContent = e.txt; $('action-tip').hidden = false; clearTimeout(actionTipTimer); actionTipTimer = setTimeout(() => { $('action-tip').hidden = true; }, 3500); } break;
@@ -584,6 +585,12 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { keys[e.code] = false; if (e.code === 'Tab') showScore = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouse.down = false; });
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) return;
+  for (const k in keys) keys[k] = false;
+  mouse.down = false; touchReset(); gin.mx = gin.my = 0; gin.fire = false;
+  if (joined) send({ t: 'in', mx: 0, my: 0, a: +aim.toFixed(3), f: 0 });
+});
 cv.addEventListener('mousemove', e => { if (useTouch) return; mouse.x = e.clientX; mouse.y = e.clientY; aimMode = 'mouse'; });
 cv.addEventListener('mousedown', e => {
   if (useTouch || patchNotesOpen()) return;
@@ -750,7 +757,7 @@ function cycleOrder(dir, build) {
 }
 function pollGamepad() {
   gin.mx = gin.my = 0; gin.fire = gin.aiming = false;
-  if (patchNotesOpen()) return;
+  if (document.hidden || patchNotesOpen()) return;
   const gp = navigator.getGamepads ? [...navigator.getGamepads()].find(g => g && g.connected) : null;
   if (!gp) return;
   const ax = i => { const v = gp.axes[i] || 0; return Math.abs(v) < 0.2 ? 0 : v; };
@@ -777,7 +784,7 @@ function pollGamepad() {
 setInterval(() => {
   pollGamepad();
   if (!joined) return;
-  if (patchNotesOpen()) { send({ t: 'in', mx: 0, my: 0, a: +aim.toFixed(3), f: 0 }); return; }
+  if (document.hidden || patchNotesOpen()) { send({ t: 'in', mx: 0, my: 0, a: +aim.toFixed(3), f: 0 }); return; }
   const k = c => (keys[c] ? 1 : 0);
   const smx = tin.mx + gin.mx, smy = tin.my + gin.my;
   const mx = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft') + smx;
@@ -1137,6 +1144,11 @@ function buildWorld() {
       blob: new THREE.CircleGeometry(1, 14).rotateX(-Math.PI / 2),
       ring: new THREE.RingGeometry(0.82, 1, 48),
       bullet: new THREE.BoxGeometry(1, 1, 1),
+      gun: new THREE.BoxGeometry(1, 1, 1).translate(0.5, 0, 0),
+      visor: new THREE.BoxGeometry(6, 9, 17),
+      antenna: new THREE.CylinderGeometry(0.7, 0.7, 9, 6),
+      pickupBox: new THREE.BoxGeometry(16, 12, 16),
+      pickupBand: new THREE.BoxGeometry(16.6, 4, 16.6),
       rocket: new THREE.CylinderGeometry(2.2, 2.2, 12, 10).rotateZ(Math.PI / 2),
     },
     mat: {},
@@ -1171,6 +1183,9 @@ function buildWorld() {
   W.mat.metalLight = new THREE.MeshStandardMaterial({ color: '#7d8590', roughness: 0.4, metalness: 0.6 });
   W.mat.gunBody = new THREE.MeshStandardMaterial({ color: '#1d1f24', roughness: 0.5, metalness: 0.5 });
   W.mat.guns = WCOL.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.4, metalness: 0.3 }));
+  W.mat.pickupBody = new THREE.MeshStandardMaterial({ color: '#20242a', roughness: 0.4, metalness: 0.4 });
+  W.mat.pickupBands = WCOL.map(c => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.6 }));
+  W.mat.pickupGlows = WCOL.map(c => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.6, side: THREE.DoubleSide }));
   W.mat.shield = new THREE.MeshBasicMaterial({ color: '#bef0ff', transparent: true, opacity: 0.25, depthWrite: false });
   W.mat.bullet = new THREE.MeshBasicMaterial({ color: '#ffe68c' });
   W.mat.blob = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.3, depthWrite: false });
@@ -1282,20 +1297,25 @@ function buildWorld() {
 function disposeWorld() {
   if (!world) return;
   world.arenaView.dispose();
-  for (const pool of [world.units, world.crates, world.bullets, world.pickups, world.meteors, world.airdrops]) for (const o of pool.values()) { scene.remove(o); disposeEncounter(o); }
-  for (const B of booms) scene.remove(B.ball, B.ring);
+  const geometries = new Set(Object.values(world.geo)), materials = new Set(), textures = new Set();
+  for (const asset of Object.values(world.mat).flat()) {
+    if (asset.isMaterial) materials.add(asset);
+    if (asset.isTexture) textures.add(asset);
+  }
+  const release = root => {
+    root.traverse(o => {
+      if (o.isInstancedMesh) o.dispose();
+      if (o.geometry) geometries.add(o.geometry);
+      for (const m of [].concat(o.material || [])) materials.add(m);
+    });
+    scene.remove(root);
+  };
+  for (const pool of [world.units, world.crates, world.bullets, world.pickups, world.meteors, world.airdrops]) for (const o of pool.values()) release(o);
+  for (const B of booms) { release(B.ball); release(B.ring); }
+  release(world.root);
+  for (const m of materials) { for (const k of ['map', 'bumpMap', 'emissiveMap']) if (m[k]) textures.add(m[k]); m.dispose(); }
+  geometries.forEach(g => g.dispose()); textures.forEach(t => t.dispose());
   booms.length = 0; particles.length = 0;
-  scene.remove(world.root);
-  const seen = new Set();
-  world.root.traverse(o => {
-    if (o.geometry) o.geometry.dispose();
-    for (const m of [].concat(o.material || [])) {
-      if (seen.has(m)) continue;
-      seen.add(m);
-      for (const k of ['map', 'bumpMap', 'emissiveMap']) if (m[k]) m[k].dispose();
-      m.dispose();
-    }
-  });
   world = null;
 }
 
@@ -1307,8 +1327,8 @@ function blob(r) {
 }
 function makeGun() {
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1).translate(0.5, 0, 0), world.mat.gunBody);
-  const stripe = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1).translate(0.5, 0, 0), world.mat.guns[0]);
+  const body = new THREE.Mesh(world.geo.gun, world.mat.gunBody);
+  const stripe = new THREE.Mesh(world.geo.gun, world.mat.guns[0]);
   body.castShadow = stripe.castShadow = true;
   g.add(body, stripe);
   g.userData = { body, stripe, w: -1 };
@@ -1330,7 +1350,7 @@ function makeBuddy(u) {
   body.scale.set(12, 14, 12); body.position.y = 18; body.castShadow = true;
   // kepala & badan satu bulatan (ala Buddy); tekstur gesper menghadap +X
   body.rotation.y = -Math.PI / 2;
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(6, 9, 17), M.visor);
+  const visor = new THREE.Mesh(world.geo.visor, M.visor);
   visor.position.set(9.5, 22, 0);
   const eyes = [-4, 4].map(z => {
     const e = new THREE.Mesh(world.geo.sphere, M.white); e.scale.setScalar(2.4); e.position.set(12.6, 22.5, z);
@@ -1344,7 +1364,7 @@ function makeBuddy(u) {
   const gun = makeGun(); gun.position.set(2, 13, 10);
   rig.add(body, visor, ...eyes, ...feet, gun);
   if (u.kind === 1) {
-    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 9, 6), M.metalLight); ant.position.set(-2, 35, 0);
+    const ant = new THREE.Mesh(world.geo.antenna, M.metalLight); ant.position.set(-2, 35, 0);
     const tip = new THREE.Mesh(world.geo.sphere, u.elite ? M.gold : M.teamFlat[u.team]); tip.scale.setScalar(u.elite ? 3.4 : 2.6); tip.position.set(-2, 40, 0);
     rig.add(ant, tip);
     if (u.elite) { // Buddy Elit: helm emas
@@ -1551,10 +1571,10 @@ function updateWorld(S, me, dt) {
   // senjata tergeletak
   sync(W.pickups, S.pickups, p => p[0], p => {
     const g = new THREE.Group();
-    const box = new THREE.Mesh(new THREE.BoxGeometry(16, 12, 16), new THREE.MeshStandardMaterial({ color: '#20242a', roughness: 0.4, metalness: 0.4 }));
-    const band = new THREE.Mesh(new THREE.BoxGeometry(16.6, 4, 16.6), new THREE.MeshStandardMaterial({ color: WCOL[p[3]], emissive: WCOL[p[3]], emissiveIntensity: 0.6 }));
+    const box = new THREE.Mesh(W.geo.pickupBox, W.mat.pickupBody);
+    const band = new THREE.Mesh(W.geo.pickupBand, W.mat.pickupBands[p[3]]);
     box.castShadow = true;
-    const glow = new THREE.Mesh(W.geo.ring, new THREE.MeshBasicMaterial({ color: WCOL[p[3]], transparent: true, opacity: 0.6, side: THREE.DoubleSide }));
+    const glow = new THREE.Mesh(W.geo.ring, W.mat.pickupGlows[p[3]]);
     glow.rotation.x = -Math.PI / 2; glow.scale.setScalar(14); glow.position.y = 1;
     const spin = new THREE.Group(); spin.add(box, band);
     g.add(spin, glow); g.userData = { spin };
@@ -1699,6 +1719,7 @@ const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 function frame() {
   requestAnimationFrame(frame);
   const now = performance.now();
+  if (document.hidden || ((!joined || inRoom() || patchNotesOpen()) && now - lastT < 1000 / 30)) return;
   const dt = Math.min(0.05, (now - lastT) / 1000);
   lastT = now; time += dt;
   fpsN++; fpsT += (now - fpsLast) / 1000; fpsLast = now;

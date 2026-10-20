@@ -7,6 +7,29 @@ const mesh = (parent, geometry, material, x = 0, y = 0, z = 0) => {
 };
 const box = (parent, material, sx, sy, sz, x = 0, y = 0, z = 0) => mesh(parent, new THREE.BoxGeometry(sx, sy, sz), material, x, y, z);
 
+export function makeTrain(cars = 3) {
+  const steel = solid('#26333c'), red = solid('#c63c36'), blue = solid('#2e6c84');
+  const brass = solid('#e5b956', { metalness: 0.65 }), glass = glow('#a5e8eb');
+  const wheelGeometry = new THREE.CylinderGeometry(10, 10, 5, 10).rotateX(Math.PI / 2);
+  return Array.from({ length: cars }, (_, i) => {
+    const root = new THREE.Group(), wheels = [];
+    box(root, steel, 96, 10, 43, 0, 17);
+    for (const x of [-30, 30]) for (const z of [-24, 24]) wheels.push(mesh(root, wheelGeometry, steel, x, 11, z));
+    if (i === 0) {
+      mesh(root, new THREE.CylinderGeometry(19, 19, 54, 12).rotateZ(Math.PI / 2), red, 14, 40);
+      box(root, red, 30, 43, 42, -28, 42); box(root, steel, 38, 5, 51, -28, 66);
+      for (const side of [-1, 1]) box(root, glass, 20, 18, 1, -28, 49, side * 21.5);
+      mesh(root, new THREE.CylinderGeometry(9, 6, 28, 10), steel, 26, 65);
+      mesh(root, new THREE.CylinderGeometry(7, 7, 5, 10).rotateZ(Math.PI / 2), glow('#fff4b0'), 44, 42);
+      box(root, brass, 10, 16, 48, 48, 22);
+    } else {
+      box(root, blue, 86, 35, 42, 0, 38); box(root, brass, 88, 5, 44, 0, 56);
+      for (const x of [-28, 0, 28]) box(root, steel, 4, 32, 44, x, 38);
+    }
+    root.userData = { wheels }; return root;
+  });
+}
+
 export function disposeEncounter(root) {
   if (!root?.userData.owned) return;
   const geometries = new Set(), materials = new Set();

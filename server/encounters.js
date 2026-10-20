@@ -60,6 +60,37 @@ class Encounters {
     g.events.push({ k: 'shatter', x: c.x, y: c.y }); return true;
   }
 
+  spawnMbg(e) {
+    const g = this.game, recipients = [], covered = new Set();
+    for (const unit of g.units.values()) {
+      const recipient = unit.driver || unit;
+      if (unit.team < 0 || !g.alive[unit.team] || !['human', 'bot'].includes(recipient.kind)) continue;
+      recipients.push({ unit, recipient });
+      if (recipient.owner) covered.add(recipient.owner);
+    }
+    // Players awaiting respawn get their delivery beside their own spawn.
+    for (const player of g.players.values()) if (!covered.has(player.id) && g.alive[player.team]) {
+      recipients.push({ unit: { ...g.bases[player.team].spawn, a: 0 }, recipient: null });
+    }
+    const guns = ['smg', 'shotgun', 'bazooka', 'sniper', 'flamer', 'grenade', 'minigun', 'laser'];
+    e.gifts = [];
+    for (const { unit } of recipients) {
+      let spot = null;
+      for (const radius of [52, 72, 100]) {
+        for (const turn of [0, Math.PI / 4, -Math.PI / 4, Math.PI / 2, -Math.PI / 2, Math.PI]) {
+          const a = unit.a + turn, p = { x: unit.x + Math.cos(a) * radius, y: unit.y + Math.sin(a) * radius };
+          if (this.validSpot(p.x, p.y, 12)) { spot = p; break; }
+        }
+        if (spot) break;
+      }
+      if (!spot) spot = this.safeSpot(unit.x, unit.y, 200, 12);
+      if (!spot) continue;
+      const gift = this.dropWeapon(spot.x, spot.y, guns[Math.floor(Math.random() * guns.length)], 45, true);
+      if (gift) e.gifts.push([gift.id, gift.x, gift.y]);
+    }
+    g.events.push({ k: 'evt', name: 'BANSOS MBG DIBAGIKAN!', d: `${e.gifts.length} senjata acak di depan pemain. Senjata lama tetap di tangan; tekan E untuk menukar.` });
+  }
+
   spawnDrop(e) {
     const g = this.game, spot = this.safeSpot(e.x, e.y, 150, 22);
     if (!spot) return;

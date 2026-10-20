@@ -1,7 +1,15 @@
 import * as THREE from './vendor/three.module.min.js';
-import { makeHelicopter } from './encounters.js';
+import { makeHelicopter, makeTrain } from './encounters.js';
 
-export const EVENT_COLORS = { blackhole: '#c391ff', dragon: '#ff9b48', tsunami: '#68deff', ufo: '#b2ff73', airdrop: '#e7e9ef', chickens: '#ffdc72', lord: '#64eeff' };
+export const EVENT_COLORS = { blackhole: '#c391ff', dragon: '#ff9b48', tsunami: '#68deff', ufo: '#b2ff73', airdrop: '#e7e9ef', chickens: '#ffdc72', lord: '#64eeff', train: '#ff7058', mbg: '#8ff2bb' };
+
+// Keep the curve identical to server/train.js so warning rails and collision bodies agree.
+export function trainPoint(e, distance) {
+  const along = distance - e.length / 2, phase = along / e.length * Math.PI * 2 + e.phase;
+  const bend = Math.sin(phase) * e.swerve, slope = Math.cos(phase) * e.swerve * Math.PI * 2 / e.length;
+  return { x: e.x + e.dx * along - e.dy * bend, y: e.y + e.dy * along + e.dx * bend,
+    a: Math.atan2(e.dy + e.dx * slope, e.dx - e.dy * slope) };
+}
 
 // Seluruh mesh milik view ini, sehingga pergantian event/map dapat membuang GPU resources.
 export class ArenaEventView {
@@ -22,14 +30,35 @@ export class ArenaEventView {
     if (this.root) {
       this.scene.remove(this.root);
       const geometries = new Set(), materials = new Set();
-      this.root.traverse(o => { if (o.geometry) geometries.add(o.geometry); for (const m of [].concat(o.material || [])) materials.add(m); });
+      this.root.traverse(o => { if (o.isInstancedMesh) o.dispose(); if (o.geometry) geometries.add(o.geometry); for (const m of [].concat(o.material || [])) materials.add(m); });
       geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose());
     }
     this.root = null; this.data = null; this.id = null;
   }
   make(e, map) {
     this.dispose(); this.id = e.id; this.root = new THREE.Group(); this.scene.add(this.root);
-    if (e.kind === 'blackhole') {
+    if (e.kind === 'train') {
+      const points = 120, vertices = [], indices = [], rails = [[], []], matrix = new THREE.Matrix4();
+      const ties = new THREE.InstancedMesh(new THREE.BoxGeometry(7, 3, 65), new THREE.MeshStandardMaterial({ color: '#5d4837' }), points + 1);
+      for (let i = 0; i <= points; i++) {
+        const p = trainPoint(e, e.length * i / points), nx = -Math.sin(p.a), ny = Math.cos(p.a);
+        const height = this.heightAt(p.x, p.y);
+        for (const side of [-1, 1]) {
+          vertices.push(p.x + nx * side * 42, height + 2, p.y + ny * side * 42);
+          rails[side === -1 ? 0 : 1].push(new THREE.Vector3(p.x + nx * side * 24, height + 6, p.y + ny * side * 24));
+        }
+        if (i < points) { const n = i * 2; indices.push(n, n + 1, n + 2, n + 1, n + 3, n + 2); }
+        matrix.makeRotationY(-p.a); matrix.setPosition(p.x, height + 2, p.y); ties.setMatrixAt(i, matrix);
+      }
+      this.root.add(ties);
+      for (const rail of rails) this.root.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(rail), new THREE.LineBasicMaterial({ color: '#e4d5b8' })));
+      const pathGeometry = new THREE.BufferGeometry(); pathGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); pathGeometry.setIndex(indices);
+      const path = this.mesh(pathGeometry, this.material(EVENT_COLORS.train, 0.25));
+      const cars = makeTrain(e.cars); this.root.add(...cars);
+      this.data = { path, cars };
+    } else if (e.kind === 'mbg') {
+      this.data = { gifts: null };
+    } else if (e.kind === 'blackhole') {
       this.root.position.set(e.x, this.heightAt(e.x, e.y) + 4, e.y);
       const edge = this.ring(e.radius, EVENT_COLORS.blackhole, 0.65);
       const field = this.mesh(new THREE.CircleGeometry(e.radius, 80).rotateX(-Math.PI / 2), this.material('#57308c', 0.12));
@@ -108,7 +137,25 @@ export class ArenaEventView {
     this.particleClock -= dt;
     const emit = active && this.particleClock <= 0;
     if (emit) this.particleClock = 0.05 / this.quality().particles;
-    if (e.kind === 'blackhole') {
+    if (e.kind === 'train') {
+      d.path.material.opacity = active ? 0.08 : pulse * 0.5;
+      d.cars.forEach((car, i) => {
+        car.visible = active;
+        const p = trainPoint(e, t * e.speed - i * e.spacing);
+        car.position.set(p.x, this.heightAt(p.x, p.y), p.y); car.rotation.y = -p.a;
+        for (const wheel of car.userData.wheels) wheel.rotation.z = -t * e.speed / 10;
+      });
+      if (active && emit) { const p = trainPoint(e, t * e.speed); this.particle(p.x, p.y, this.heightAt(p.x, p.y) + 85, -e.dx * 35, -e.dy * 35, 65, 0.9, 9, '#d5d8d5', 0); }
+    } else if (e.kind === 'mbg') {
+      if (active && !d.gifts) {
+        const material = this.material(EVENT_COLORS.mbg, 0.6);
+        d.gifts = (e.gifts || []).map(gift => {
+          const ring = this.mesh(new THREE.RingGeometry(22, 27, 24).rotateX(-Math.PI / 2), material);
+          ring.position.set(gift[1], this.heightAt(gift[1], gift[2]) + 3, gift[2]); return ring;
+        });
+      }
+      for (const ring of d.gifts || []) { ring.scale.setScalar(1 + Math.sin(time * 5) * 0.1); ring.material.opacity = 0.4 + pulse * 0.5; }
+    } else if (e.kind === 'blackhole') {
       d.edge.material.opacity = active ? 0.35 : pulse + 0.15;
       d.field.material.opacity = active ? 0.18 : 0.07;
       d.core.scale.setScalar(active ? 1 + Math.sin(time * 4) * 0.08 : 0.3);
@@ -143,7 +190,8 @@ export class ArenaEventView {
         const depth = positions.getX(i) / e.width;
         positions.setY(i, 5 + Math.max(0, 1 - depth * depth) * (36 + Math.sin(positions.getZ(i) * 0.04 + time * 5) * 7));
       }
-      positions.needsUpdate = true; d.water.geometry.computeVertexNormals();
+      positions.needsUpdate = true;
+      if ((d.normalTimer = (d.normalTimer || 0) - dt) <= 0) { d.normalTimer = 1 / 15; d.water.geometry.computeVertexNormals(); }
       d.foam.forEach((foam, i) => { foam.position.x = 8 * Math.sin(time * 4 + i); foam.position.y = 40 + 7 * Math.sin(time * 5 + foam.position.z * 0.04); foam.scale.set(7, 4, 13); });
       d.refuges.forEach(refuge => { refuge.material.opacity = active ? 0.35 : pulse + 0.15; });
       if (emit) { const cross = (Math.random() - 0.5) * (e.dx ? map.h : map.w); this.particle(x - e.dy * cross, y + e.dx * cross, 25, -e.dx * 50, -e.dy * 50, 80, 0.65, 7, '#c8f6ff'); }
@@ -175,7 +223,14 @@ export function drawArenaMinimap(ctx, e, age, mx, my, k, map) {
   ctx.save(); ctx.beginPath(); ctx.rect(mx, my, map.w * k, map.h * k); ctx.clip();
   ctx.strokeStyle = EVENT_COLORS[e.kind]; ctx.fillStyle = EVENT_COLORS[e.kind]; ctx.lineWidth = 2;
   ctx.setLineDash(age < e.warn ? [4, 3] : []);
-  if (e.kind === 'blackhole') {
+  if (e.kind === 'train') {
+    ctx.beginPath();
+    for (let i = 0; i <= 80; i++) { const p = trainPoint(e, e.length * i / 80); if (i) ctx.lineTo(mx + p.x * k, my + p.y * k); else ctx.moveTo(mx + p.x * k, my + p.y * k); }
+    ctx.stroke();
+    if (age >= e.warn) for (let i = 0; i < e.cars; i++) { const p = trainPoint(e, (age - e.warn) * e.speed - i * e.spacing); ctx.fillRect(mx + p.x * k - 3, my + p.y * k - 3, 6, 6); }
+  } else if (e.kind === 'mbg') {
+    for (const gift of e.gifts || []) ctx.fillRect(mx + gift[1] * k - 2, my + gift[2] * k - 2, 4, 4);
+  } else if (e.kind === 'blackhole') {
     ctx.beginPath(); ctx.arc(mx + e.x * k, my + e.y * k, e.radius * k, 0, Math.PI * 2); ctx.stroke();
     ctx.globalAlpha = 0.15; ctx.fill();
   } else if (e.kind === 'dragon') {
@@ -193,7 +248,7 @@ export function drawArenaMinimap(ctx, e, age, mx, my, k, map) {
     ctx.font = 'bold 16px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = EVENT_COLORS.tsunami;
     ctx.fillText(e.dx === 1 ? '→' : e.dx === -1 ? '←' : e.dy === 1 ? '↓' : '↑', mx + map.w * k / 2, my + map.h * k / 2);
   }
-  if (!['blackhole', 'dragon', 'tsunami'].includes(e.kind)) {
+  if (!['blackhole', 'dragon', 'tsunami', 'train', 'mbg'].includes(e.kind)) {
     const x = e.shipX ?? e.x, y = e.shipY ?? e.y;
     ctx.beginPath(); ctx.arc(mx + x * k, my + y * k, e.kind === 'chickens' ? 14 : 7, 0, Math.PI * 2); ctx.stroke();
     ctx.font = 'bold 10px system-ui'; ctx.textAlign = 'center';

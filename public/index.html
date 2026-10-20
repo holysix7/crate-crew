@@ -6,6 +6,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Crate Crew</title>
+  <link rel="modulepreload" href="vendor/three.module.min.js">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -62,7 +63,7 @@
     <div class="card">
       <h1>CRATE<span>CREW</span></h1>
       <p class="sub">Fan-remake LAN · terinspirasi Team Buddies (PS1)</p>
-      <button type="button" class="patch-launch" data-patch-notes><span>BARU · 20 OKT 2026</span><b>Chaos &amp; Loot</b><small>7 event baru · LORD · peti metal → Lihat patch notes</small></button>
+      <button type="button" class="patch-launch" data-patch-notes><span>BARU · 20 OKT 2026</span><b>Chaos &amp; Loot</b><small>9 event · Kereta Ngepot · Bansos MBG → Lihat patch notes</small></button>
 
       <div id="join-view">
         <label for="name">Nama</label>
@@ -94,7 +95,9 @@
         <div id="book-lobby" class="book"></div>
         <p><b>Awas:</b> monster raksasa menjaga zona peti, lubang besar berarti tewas, dan sesekali hujan meteor jatuh — lihat lingkaran merah! Dari atas bukit tembakanmu lebih jauh.</p>
         <details class="event-guide">
-          <summary>Panduan event & loot: UFO · LORD · Ayam · Helikopter + bencana</summary>
+          <summary>Panduan event & loot: Kereta · MBG · UFO · LORD + bencana</summary>
+          <p><b>Kereta Ngepot (6 detik):</b> jauhi seluruh jalur rel merah yang berkelok. Lokomotif dan semua gerbong membunuh unit yang tertabrak, termasuk LORD dan pengemudi tank. Perisai spawn tidak menyelamatkanmu!</p>
+          <p><b>Bansos MBG (4 detik):</b> senjata acak muncul di depan tiap pemain dan bot. Senjata yang sedang dipegang tetap aman; dekati pickup dengan pistol atau tekan E untuk menukar. Pengemudi mendapat kiriman di depan kendaraan; pemain yang menunggu respawn mendapat kiriman dekat spawn.</p>
           <p><b>UFO (warning 5 detik):</b> keluar dari sorotan hijau! Jika tertangkap, teman bisa menembak UFO sebelum korban dijatuhkan ke lubang.</p>
           <p><b>Helikopter (5 detik):</b> sentuh peti atau tank abu-abu setelah mendarat. Tim pertama mendapat tank berwarna tim dan penemu mendapat <b>Super Bazooka</b>.</p>
           <p><b>Invasi ayam (4 detik):</b> ayam mencuri peti lepas dan mematuk pemain. Tembak untuk merebut peti; peti di pad tetap aman.</p>
@@ -121,9 +124,11 @@
       <button type="button" id="patch-close" aria-label="Tutup patch notes" autofocus>✕</button>
     </header>
     <div class="patch-body">
-      <p id="patch-intro">Langit makin ramai. Rebut kiriman helikopter, selamatkan teman dari UFO, atau kalahkan boss untuk menjadi LORD!</p>
-      <h3>7 event baru di arena</h3>
+      <p id="patch-intro">Kereta Ngepot masuk arena! Hindari tabrakan maut, lalu ambil senjata dari Bansos MBG. Loading dan permainan juga dibuat lebih ringan.</p>
+      <h3>9 event baru di arena</h3>
       <div class="patch-grid">
+        <article style="--accent:#ff7058"><span>BARU · PERINGATAN 6 DETIK</span><h4>Kereta Ngepot</h4><p>Kereta masuk, berbelok di jalur melengkung, lalu keluar arena. Jauhi rel merah! Lokomotif dan gerbong membunuh siapa pun yang tertabrak, termasuk LORD dan pengemudi kendaraan. Perisai spawn tidak melindungi.</p></article>
+        <article style="--accent:#8ff2bb"><span>BARU · PERINGATAN 4 DETIK</span><h4>Bansos MBG</h4><p>Semua pemain dan bot mendapat satu pickup senjata acak di depannya. Senjata lama tetap di tangan: dekati pickup dengan pistol atau tekan E untuk menukar. Pengemudi dan pemain yang menunggu respawn juga kebagian; loot bertahan 45 detik.</p></article>
         <article style="--accent:#bd91ff"><span>01 · PERINGATAN 4 DETIK</span><h4>Blackhole</h4><p>Pusaran menarik unit, peti, dan senjata; peluru ikut melengkung. Jauhi inti yang melukai. Saat menutup, isinya terlontar keluar bersama bonus peti.</p></article>
         <article style="--accent:#ffb36b"><span>02 · PERINGATAN 5 DETIK</span><h4>Naga</h4><p>Naga melintasi koridor oranye dan meninggalkan jejak api. Hindari jalurnya, lalu ambil peti hadiah setelah api padam.</p></article>
         <article style="--accent:#70d9ff"><span>03 · PERINGATAN 7 DETIK</span><h4>Tsunami</h4><p>Gelombang menyapu arena! Naik ke bagian dalam bukit hijau. Peti hanyut kembali setelah surut, ditambah bonus, dalam kelompok simetris di tengah arena.</p></article>
@@ -145,6 +150,12 @@
         <li>Tsunami membagi ulang kayu dan metal secara seimbang di tengah; senjata langka tetap di tempat agar tidak terkumpul di satu sisi.</li>
         <li>Event besar punya hitung mundur, petunjuk di layar, dan penanda minimap. Satu event besar aktif pada satu waktu.</li>
         <li>Bot mencoba menghindari bencana, memecahkan peti metal, dan ikut berebut airdrop. Ronde baru membersihkan semua event dan buff.</li>
+      </ul>
+      <h3>Lebih ringan untuk dimainkan</h3>
+      <ul class="patch-list">
+        <li>Unduhan awal lebih kecil dan kunjungan ulang memakai aset yang sudah tersimpan. File game yang berubah tetap diperbarui saat dimuat ulang.</li>
+        <li>Senjata, Buddy, dan pickup memakai ulang bentuk yang sama agar tumpukan loot lebih ringan. Aset dibersihkan saat peta diganti.</li>
+        <li>Render lobby dan panel patch notes dibatasi 30 FPS. Tab yang tersembunyi berhenti menggambar dan melepas input gerak/tembak; pertandingan di server tetap berjalan.</li>
       </ul>
       <p class="patch-foot">Panduan lengkap juga tersedia di bagian Cara main pada lobby. Saat panel ini dibuka, karaktermu diam; pertandingan tetap berjalan.</p>
     </div>
