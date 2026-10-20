@@ -88,3 +88,14 @@ Browser verification covers master-only selection, both clients receiving the ne
 | [Optimization notes](patch-notes-optimization.jpg) | Player-facing network, rendering and resource cleanup notes |
 
 Two actual clients verified guest rejection, reassignment from a closed team, Ready/countdown reset, preserved event choices, and 4→2→3→4 world rebuilding. Controlled browser comparisons verified instance growth without dropped items and stable actor resources after replacement. These draw-call and resource checks do not claim a measured FPS percentage.
+
+## Friendly-fire integration with optimization and team controls
+
+Captured from the combined PR #4 + #5 client. The 3D frame loop is paused for these UI captures; map cards, room controls and patch notes are rendered by the actual client.
+
+| Capture | What it shows |
+|---|---|
+| [Combined lobby](friendly-fire-compat-lobby.jpg) | Two teams, six maps, and the enabled friendly-fire checkbox near the bottom of the lobby viewport |
+| [Combined patch notes](friendly-fire-compat-notes.jpg) | Team/event controls, friendly-fire and grab/throw rules, and optimization notes together |
+
+The browser verifies host team/FF controls and notes without JavaScript errors or failed assets. The 84-test server suite includes grab/throw completion on all six maps for 2, 3 and 4 teams. Two real WebSocket clients additionally verify settings synchronization and authorization, map/team persistence, countdown cancellation, carry/flight flags, throwing and landing damage, E release, and disconnect cleanup.
