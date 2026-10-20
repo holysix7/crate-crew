@@ -243,7 +243,7 @@ function updateRoom() {
   $('room-view').hidden = !joined;
   $('lobby').classList.toggle('hidden', joined && !inRoom());
   if (!inRoom() || !meta || !latest.lb) { roomKey = ''; return; }
-  const [cpu, cd, active] = latest.lb;
+  const [cpu, cd, active, ff] = latest.lb;
   const me = latest.PL.find(p => p[0] === myId);
   const master = latest.ms, amMaster = master === myId;
   const key = JSON.stringify([latest.PL.map(p => [p[0], p[1], p[2], p[7]]), latest.lb, latest.es, latest.st, myTeam, meta.map.id, master]);
@@ -292,6 +292,8 @@ function updateRoom() {
   });
   $('cpu').checked = !!cpu;
   $('cpu').disabled = !amMaster;
+  $('ff').checked = !!ff;
+  $('ff').disabled = !amMaster;
   updateEventOptions(amMaster, mName);
   const ready = !!(me && me[7]);
   $('ready').textContent = ready ? 'BATAL SIAP' : 'SIAP!';
@@ -306,6 +308,7 @@ $('ready').onclick = () => {
   send({ t: 'ready', v: !(me && me[7]) });
 };
 $('cpu').onchange = e => send({ t: 'cpu', v: e.target.checked });
+$('ff').onchange = e => send({ t: 'ff', v: e.target.checked });
 $('events-enabled').onchange = e => send({ t: 'events', enabled: e.target.checked });
 function updateEventOptions(amMaster, masterName) {
   const options = meta.eventOptions || [], state = latest.es || [1, 0];
@@ -569,8 +572,11 @@ function onEvent(e) {
       for (let i = 0; i < 4; i++) setTimeout(() => onEvent({ k: 'boom', x: e.x + (Math.random() - 0.5) * 100, y: e.y + (Math.random() - 0.5) * 100, r: 90 }), i * 180);
       break;
     case 'board': burst(e.x, e.y, 10, 6, '#cccccc', 50, 0.4, 3, 20); sfx.pick(); break;
-    case 'start': pushFeed('<b style="color:#f6c453">Ronde dimulai!</b> Kumpulkan peti untuk merakit Buddy.'); if (joined) sfx.build(); break;
+    case 'start':
+      pushFeed('<b style="color:#f6c453">Ronde dimulai!</b> Kumpulkan peti untuk merakit Buddy.' + (latest && latest.lb && latest.lb[3] ? ' <b style="color:#ff7a5a">FRIENDLY FIRE aktif</b> · E angkat pemain, F lempar.' : ''));
+      if (joined) sfx.build(); break;
     case 'cpu': pushFeed(`${esc(e.n)} ${e.v ? 'menyalakan' : 'mematikan'} CPU untuk tim kosong`); break;
+    case 'ff': pushFeed(`${esc(e.n)} ${e.v ? 'menyalakan' : 'mematikan'} <b>friendly fire</b>`); break;
     case 'eventcfg': pushFeed(`${esc(e.n)} ${e.v ? 'mengaktifkan' : 'mematikan'} ${esc(e.name)}`); break;
     case 'order':
       if (e.t === myTeam) pushFeed(`<b style="color:${tcol(e.t)}">${esc(e.n)}</b>: ${esc(e.txt)}`);
@@ -863,7 +869,7 @@ function sampleState() {
     const p = a.Um.get(u[0]);
     return { id: u[0], team: u[1], x: p ? lerp(p[2], u[2], f) : u[2], y: p ? lerp(p[3], u[3], f) : u[3], a: p ? lerpAng(p[4], u[4], f) : u[4],
       hp: u[5], max: u[6], w: u[7], carry: u[8], kind: u[9], owner: u[10], moving: u[11], ammo: u[12], shield: u[13],
-      hull: p ? lerpAng(p[14], u[14], f) : u[14], anim: u[15], rage: u[16], elite: u[17], lord: u[18], lift: u[19] || 0, neutral: u[20] };
+      hull: p ? lerpAng(p[14], u[14], f) : u[14], anim: u[15], rage: u[16], elite: u[17], lord: u[18], lift: u[19] || 0, neutral: u[20], st: u[21] || 0, holding: u[22] || 0 };
   });
   const crates = b.C.map(c => {
     const p = a.Cm.get(c[0]);
@@ -1635,7 +1641,7 @@ function updateWorld(S, me, dt) {
     const st = u.moving ? Math.sin(ph) * 5 : 0;
     d.feet[0].position.x = st; d.feet[1].position.x = -st;
     setGun(d.gun, u.w);
-    d.gun.visible = !u.carry;
+    d.gun.visible = !u.carry && !u.holding;
     d.shield.visible = !!u.shield;
     if (u.shield) W.mat.shield.opacity = 0.2 + Math.sin(time * 20) * 0.1;
   });
@@ -1891,7 +1897,7 @@ function frame() {
   for (const u of S.units) {
     const isMe = me && u.id === me.id;
     const mon = u.kind === K_MON, lord = u.kind === K_LORD || u.lord;
-    const p = toScreen(u.x, hAt(u.x, u.y) + u.lift + (u.kind === K_UFO ? 250 : lord ? (u.kind === K_LORD ? 170 : 115) : mon ? 100 : u.kind === 2 ? 36 : isVeh(u) ? 44 : u.carry ? 82 : 56), u.y);
+    const p = toScreen(u.x, hAt(u.x, u.y) + u.lift + (u.kind === K_UFO ? 250 : lord ? (u.kind === K_LORD ? 170 : 115) : mon ? 100 : u.kind === 2 ? 36 : isVeh(u) ? 44 : u.carry || u.holding ? 82 : 56), u.y);
     if (!p) continue;
     if (lord || u.kind === K_UFO) hpBar(p.x, p.y + 6, 85, u.hp / u.max, lord ? '#58e5ff' : '#a7ff69');
     else if (mon) hpBar(p.x, p.y + 6, 80, u.hp / u.max, u.rage ? '#ff5a3a' : MON_COL);
@@ -1992,7 +1998,12 @@ function drawHUD(S, me, dt) {
     const enemyPad = map.bases.some((o, t) => t !== myTeam && latest.pad[t] > 0 && Math.hypot(me.x - o.pad.x, me.y - o.pad.y) < 72);
     // kendaraan kosong milik tim di dekat pemain
     const ride = me.kind === 0 && S.units.find(v => isVeh(v) && v.team === myTeam && !v.owner && Math.hypot(v.x - me.x, v.y - me.y) < 46);
-    if (me.lift) hint = 'DICULIK UFO! Temanmu bisa menembak piring terbang untuk menolong.';
+    // unit lain yang bisa diangkat (friendly fire): infanteri bukan LORD/perisai/sedang diangkat, dalam jangkauan server (r + r + 8)
+    const grabbable = latest.lb && latest.lb[3] && me.kind === 0 && !me.carry && !me.holding && S.units.find(v => v.id !== me.id && v.kind <= 1 && !v.lord && !v.holding && !v.shield && !v.lift && Math.hypot(v.x - me.x, v.y - me.y) < 36);
+    if (me.st === 1) hint = 'Kamu sedang diangkat! Tunggu dilempar atau diturunkan.';
+    else if (me.st === 2) hint = 'Terbang!';
+    else if (me.lift) hint = 'DICULIK UFO! Temanmu bisa menembak piring terbang untuk menolong.';
+    else if (me.holding) hint = 'F / klik kanan  lempar   ·   E  turunkan';
     else if (me.lord) hint = 'LORD · Klik / RT = tebas · tidak bisa ambil peti · buff hilang saat mati';
     else if (me.carry && S.crates.find(c => c.metal && c.z > 35 && c.z < 55 && Math.hypot(c.x - me.x, c.y - me.y) < 10)) hint = 'PETI METAL · F / klik kanan = lempar, pecah jadi 2 peti kayu';
     else if (me.carry) hint = dPad < 72 ? 'E  taruh peti di petak yang dibidik   ·   R  buku resep' : 'E  jatuhkan   ·   F / klik kanan  lempar   ·   bawa ke pad markasmu';
@@ -2007,6 +2018,7 @@ function drawHUD(S, me, dt) {
     else if (S.pickups.some(p => Math.hypot(p[1] - me.x, p[2] - me.y) < 27)) hint = 'E  ambil / tukar senjata';
     else if (loose) hint = 'E  angkat peti';
     else if (enemyPad) hint = 'E  curi peti musuh!';
+    else if (grabbable) hint = 'E  angkat pemain (friendly fire)';
   }
   if (hint) {
     ctx.font = '800 14px system-ui';
