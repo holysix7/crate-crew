@@ -221,3 +221,25 @@ kbd { display: inline-block; padding: 1px 6px; border-radius: 5px; background: #
 #maps button:focus-visible { outline: 3px solid #f6c453; outline-offset: 2px; }
 .map-description { font-size: 11px; line-height: 1.6; margin: 10px 0 14px; }
 @media (max-width: 480px) { #maps.map-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.duel-toggle { padding: 12px; border: 1px solid #a4dbcf66; border-radius: 10px; background: #8dd8c30b; }
+.duel-config { margin: 14px 0; padding: 14px; background: #111f1c; border: 1px solid #66867c; border-radius: 12px; }
+.duel-config h3 { color: #f6c453; margin: 0 0 8px; }
+.duel-config p { font-size: 12px; line-height: 1.65; }
+.duel-selects { display: grid; grid-template-columns: minmax(0,1fr) 24px minmax(0,1fr); align-items: center; gap: 8px; }
+.duel-selects label { min-width: 0; font-size: 11px; }
+.duel-selects select { display: block; margin-top: 6px; width: 100%; min-width: 0; color: #fff; background: #2b3b35; border: 1px solid #7a998c; border-radius: 6px; padding: 10px 4px; font: inherit; }
+.duel-selects span { color: #f6c453; font-size: 11px; font-weight: 900; text-align: center; }
+.duel-weapon-guide { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; }
+.duel-weapon-guide div { border-left: 3px solid var(--weapon-color); background: #ffffff08; padding: 7px; font-size: 11px; }
+.duel-weapon-guide small { display: block; color: #b2c3ba; margin-top: 3px; font-size: 10px; }
+.duel-hud { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); width: min(600px,calc(100vw - 20px)); z-index: 8; background: #0f1d19ed; color: #fff; padding: 10px 14px; border: 1px solid #b6d4c355; border-radius: 12px; pointer-events: none; }
+.duel-heading { display: flex; justify-content: space-between; color: #f6c453; font-size: 12px; letter-spacing: 1px; }
+.duel-healths { display: grid; grid-template-columns: minmax(0,1fr) 24px minmax(0,1fr); gap: 12px; align-items: center; margin-top: 7px; }
+.duel-healths strong { display: block; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.duel-healths progress { width: 100%; height: 9px; accent-color: #e5484d; }
+.duel-healths > div:last-child progress { accent-color: #3e7bfa; }
+.duel-healths small { color: #c9d5cf; font-size: 11px; }
+.duel-hud p { margin: 7px 0 0; font-size: 11px; color: #b9d8cc; }
+#duel-abort { pointer-events: auto; float: right; padding: 5px 8px; font-size: 10px; margin-top: -19px; color: #ffcabf; background: #572f28; }
+.duel-hud[hidden], .duel-config[hidden], #normal-settings[hidden] { display: none; }
+@media (max-width: 600px) { .duel-hud { padding: 8px; } .duel-healths { gap: 6px; } #duel-abort { float: none; margin-top: 7px; } }

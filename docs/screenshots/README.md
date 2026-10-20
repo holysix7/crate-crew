@@ -99,3 +99,18 @@ Captured from the combined PR #4 + #5 client. The 3D frame loop is paused for th
 | [Combined patch notes](friendly-fire-compat-notes.jpg) | Team/event controls, friendly-fire and grab/throw rules, and optimization notes together |
 
 The browser verifies host team/FF controls and notes without JavaScript errors or failed assets. The 84-test server suite includes grab/throw completion on all six maps for 2, 3 and 4 teams. Two real WebSocket clients additionally verify settings synchronization and authorization, map/team persistence, countdown cancellation, carry/flight flags, throwing and landing damage, E release, and disconnect cleanup.
+
+## Arena 1v1
+
+Actual Chrome captures of the lobby, dedicated 960 × 720 arena and result. A local fixture holds countdown/results and stages fighter positions for readable captures; selection, E swaps, movement, mouse attacks, damage and winner/lobby transitions use the real client and authoritative server. Chrome uses software rendering; these images are not an FPS benchmark.
+
+| Capture | What it shows |
+|---|---|
+| [Duel setup](duel-lobby.jpg) | Master chooses Alpha and Bravo while the master becomes a spectator; all seven weapon choices are listed |
+| [Mobile setup](duel-mobile.jpg) | Fighter selectors and the seven-weapon guide fit a 390px screen |
+| [Arena overview](duel-arena.jpg) | Two fighters, equal spawns, symmetric walls/pillars, seven shared racks and spectator HUD |
+| [Playing with a spear](duel-fighter.jpg) | Real E pickup, keyboard movement and mouse melee attack; opponent has 92/120 HP and the swing cone is visible |
+| [Duel result](duel-result.jpg) | First kill, winner announcement and three-second return countdown, without respawning |
+| [Duel patch notes](duel-notes.jpg) | Dashboard rules for selection, weapons, spectators, results and saved normal settings |
+
+The browser flow verifies late spectator joins, rejected spectator actions/abort, every rack/equipped model, normal lobby restoration and master handover. Two full weapon-swap cycles end at **65 GPU geometries / 4 textures** each, with no growth. The focused fighter check verifies real E, D movement, mouse aim/held attack, master cancellation and the updated notes. Both checks finish without JavaScript errors or failed assets. The full Node suite passes **97 tests**, including 13 duel tests.

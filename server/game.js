@@ -4,6 +4,7 @@
 const { ArenaEvents, EVENT_RULES } = require('./arena-events');
 const { Encounters } = require('./encounters');
 const { RectIndex } = require('./spatial-index');
+const { DuelArena, MELEE } = require('./duel');
 
 const EVENT_OPTIONS = [
   { id: 'meteor', name: 'Hujan Meteor' }, { id: 'supply', name: 'Kiriman Peti' }, { id: 'rage', name: 'Monster Mengamuk' },
@@ -35,6 +36,7 @@ const WEAPONS = {
 };
 WEAPONS.superbazooka = { label: 'Super Bazooka', rate: 1.4, dmg: 125, speed: 470, spread: 0, pellets: 1, ammo: 6, life: 1.5, rocket: true, splash: 105 };
 WEAPONS.lordblade = { label: 'Tebasan LORD', rate: 0.7, dmg: 32, speed: 0, spread: 0, pellets: 0, ammo: Infinity, life: 0 };
+for (const [id, w] of Object.entries(MELEE)) WEAPONS[id] = { ...w, melee:true, speed:0, spread:0, pellets:0, ammo:Infinity, life:0 };
 const WLIST = Object.keys(WEAPONS);
 const KIND = { human: 0, bot: 1, turret: 2, tank: 3, jeep: 4, monster: 5, ufo: 6, chicken: 7, lord: 8 };
 const UNIT_R = 14, HQ_HP = 3200, UNIT_HP = 100, TURRET_HP = 260, CRATE_H = 24, CARRY_Z = 44;
@@ -176,6 +178,7 @@ class Game {
     this.eventMask = ALL_EVENTS_MASK;
     this.networkTick = 0; this.networkState = '';
     this.master = 0; // id pemain room master (memilih peta, CPU, bisa mengeluarkan pemain)
+    this.duel = new DuelArena(this);
     this.setMap(0);
     this.toLobby();
   }
@@ -214,6 +217,7 @@ class Game {
       t: 'welcome', teams: this.teams, colors: TEAM_COLORS.slice(0, this.teams), names: TEAM_NAMES.slice(0, this.teams), weapons: WLIST,
       arenaEvents: EVENT_RULES,
       eventOptions: EVENT_OPTIONS,
+      duel: this.duel.snapshot(), meleeWeapons: Object.entries(MELEE).map(([id,w])=>({id,...w})),
       map: this.mapInfo(), maps: MAP_CATALOG, hqMax: HQ_HP,
       wlabels: WLIST.map(k => WEAPONS[k].label), recipes: RECIPES.map(({ id, name, desc, lo, hi }) => ({ id, name, desc, lo, hi })),
     });
@@ -251,10 +255,13 @@ class Game {
   }
   // ruang tunggu: dunia kosong, semua pemain harus menekan "Siap" lagi
   toLobby() {
+    const returning = this.duel.active;
+    if (returning) this.duel.restore();
     this.clearWorld();
     this.state = 'lobby';
     for (const p of this.players.values()) { p.ready = false; p.unitId = 0; }
-    for (let i = 0; i < 10; i++) this.spawnCrate(true);
+    if (!this.duel.enabled) for (let i = 0; i < 10; i++) this.spawnCrate(true);
+    if (returning) this.duel.sendWelcome();
   }
   humanTeams() { return new Set([...this.players.values()].map(p => p.team)); }
   activeTeams() { return this.cpu ? this.teams : this.humanTeams().size; }
@@ -302,6 +309,7 @@ class Game {
     if (u && VEHICLES[u.kind]) { u.driver = null; u.owner = 0; } // kendaraan tetap ada, kembali dikemudikan AI
     else if (u) this.removeUnit(u);
     this.players.delete(p.id);
+    this.duel.leave(p.id);
     if (!p.kicked) this.events.push({ k: 'leave', n: p.name });
     if (this.master === p.id) {
       // room master keluar → diwariskan ke pemain yang paling lama di ruangan
@@ -405,10 +413,14 @@ class Game {
       if (!this.master) this.master = p.id; // pemain pertama jadi room master
       c.send(JSON.stringify({ t: 'joined', id: p.id, team }));
       this.events.push({ k: 'join', n: name, t: team });
+      this.duel.rosterChanged();
       return;
     }
     const p = c.player;
     if (!p) return;
+    if (m.t === 'duel') return this.duel.configure(p, m);
+    if (this.duel.active && !['in','act','chat','kick','master'].includes(m.t)) return;
+    if (this.duel.active && ['in','act'].includes(m.t) && this.duel.side(p.id)<0) return;
     if (m.t === 'in') {
       p.input = { mx: clamp(+m.mx || 0, -1, 1), my: clamp(+m.my || 0, -1, 1), a: Number.isFinite(+m.a) ? +m.a : 0, fire: !!m.f };
     } else if (m.t === 'act' && ['grab', 'throw', 'build'].includes(m.k) && p.acts.length < 4) {
@@ -454,6 +466,7 @@ class Game {
     }
   }
   lobbyTick(dt) {
+    if (this.duel.enabled) return;
     const ps = [...this.players.values()];
     const ok = ps.length > 0 && ps.every(p => p.ready) && this.activeTeams() >= 2;
     if (this.state === 'lobby') { if (ok) { this.state = 'countdown'; this.countdown = 3; } }
@@ -854,6 +867,7 @@ class Game {
   }
   kill(u, attackerId, fell = false) {
     if (!this.units.has(u.id)) return;
+    if (this.duel.active) return this.duel.killed(u);
     if (!u.lord && u.weapon !== 'pistol' && isInf(u) && !fell) {
       this.pickups.set(this.id(), { id: this.nextId - 1, x: u.x, y: u.y, w: u.weapon, ammo: u.ammo, ttl: 20 });
     }
@@ -1187,6 +1201,7 @@ class Game {
   tick() {
     const dt = TICK;
     this.time += dt;
+    if (this.duel.enabled) { this.duel.tick(dt); this.broadcast(); return; }
     if (this.state === 'lobby' || this.state === 'countdown') {
       this.lobbyTick(dt);
       this.broadcast();
@@ -1408,7 +1423,7 @@ class Game {
     // jenis peluru: 0 biasa, 1 roket, 2 batu monster, 3 api, 4 granat, 5 laser
     for (const b of this.bullets) B.push([b.id, r1(b.x), r1(b.y), b.rock ? 2 : b.fx || (b.rocket ? 1 : 0), b.team]);
     for (const p of this.pickups.values()) P.push([p.id, r1(p.x), r1(p.y), WLIST.indexOf(p.w)]);
-    for (const p of this.players.values()) PL.push([p.id, p.name, p.team, p.kills, p.deaths, p.unitId, p.unitId ? 0 : Math.ceil(p.respawn), p.ready ? 1 : 0]);
+    for (const p of this.players.values()) PL.push([p.id, p.name, this.duel.active?this.duel.side(p.id):p.team, p.kills, p.deaths, p.unitId, p.unitId ? 0 : Math.ceil(p.respawn), p.ready ? 1 : 0]);
     return JSON.stringify({
       t: 's', tm: +this.time.toFixed(3), st: this.state, win: this.winner, et: Math.ceil(this.endTimer), rl: Math.ceil(this.roundLeft),
       hq: this.hq.map(Math.ceil), al: this.alive, pad: this.pads.map((_, t) => this.padCount(t)), U, C, B, P, PL, ev: this.events,
@@ -1416,6 +1431,7 @@ class Game {
       or: this.orders.map((o, t) => [o.build, o.mode, o.target, this.buildWant(t)]),
       lb: [this.cpu ? 1 : 0, Math.ceil(this.countdown), this.activeTeams(), this.ff ? 1 : 0],
       es: [this.eventsEnabled ? 1 : 0, this.eventMask],
+      duel: this.duel.snapshot(),
       A: this.arenaEvents.snapshot(), D: this.encounters.snapshot(),
       M: this.meteors.map(m => [m.id, r1(m.x), r1(m.y), +m.t.toFixed(2), m.r]),
     });
