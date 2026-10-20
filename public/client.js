@@ -3,8 +3,9 @@
 // Semua tekstur digambar lewat kode (canvas), tanpa file gambar.
 import * as THREE from './vendor/three.module.min.js';
 import { HAZARD_COLORS, groundHeight, drawMapPreview } from './terrain.js';
+import { InstanceBatch } from './instance-batch.js';
 import { ArenaEventView, EVENT_COLORS, drawArenaMinimap } from './arena-events.js';
-import { makeUfo, makeChicken, makeLord, animateEncounter, makeAirdrop, animateAirdrop, disposeEncounter } from './encounters.js';
+import { makeUfo, makeChicken, makeLord, animateEncounter, makeAirdrop, animateAirdrop } from './encounters.js';
 
 const cv = document.getElementById('game');
 const hud = document.getElementById('hud');
@@ -183,7 +184,16 @@ const sfx = {
 
 // ---------------- jaringan ----------------
 const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
-const send = o => { if (ws.readyState === 1) ws.send(JSON.stringify(o)); };
+let lastInputText='',lastInputSent=0;
+const send = o => {
+  if(ws.readyState!==1)return;
+  const text=JSON.stringify(o),now=performance.now();
+  if(o.t==='in') {
+    if(text===lastInputText&&now-lastInputSent<250)return;
+    lastInputText=text;lastInputSent=now;
+  }
+  ws.send(text);
+};
 ws.onopen = () => { $('status').textContent = 'Terhubung ke ' + location.host; };
 ws.onclose = () => {
   $('status').textContent = kicked ? `Kamu dikeluarkan dari ruangan oleh room master (${kicked}).` : 'Terputus dari server. Muat ulang halaman.';
@@ -204,8 +214,9 @@ ws.onmessage = e => {
 function onWelcome(m) {
   meta = m;
   if (m.wlabels) WNAME = m.wlabels.map((n, i) => (i === 4 ? 'Meriam tank' : n));
-  if (world && world.mapId !== m.map.id) disposeWorld(); // server mengganti peta
+  if (world && (world.mapId !== m.map.id || world.teamCount !== m.teams)) { disposeWorld(); snaps.length=0; latest=null; lastMe=null; prevBullets.clear(); } // server mengganti peta
   if (!world) world = buildWorld();
+  if(selTeam>=m.teams)selTeam=-1;
   roomKey = '';
   $('join').disabled = false;
   renderTeamButtons();
@@ -236,6 +247,7 @@ function renderTeamButtons() {
   }
 }
 // ---------------- ruang tunggu ----------------
+for(const button of $('team-count').children)button.onclick=()=>send({t:'teams',count:Number(button.dataset.count)});
 const inRoom = () => joined && latest && (latest.st === 'lobby' || latest.st === 'countdown');
 let roomKey = '';
 function updateRoom() {
@@ -246,9 +258,15 @@ function updateRoom() {
   const [cpu, cd, active, ff] = latest.lb;
   const me = latest.PL.find(p => p[0] === myId);
   const master = latest.ms, amMaster = master === myId;
-  const key = JSON.stringify([latest.PL.map(p => [p[0], p[1], p[2], p[7]]), latest.lb, latest.es, latest.st, myTeam, meta.map.id, master]);
+  const key = JSON.stringify([latest.PL.map(p => [p[0], p[1], p[2], p[7]]), latest.lb, latest.es, latest.st, myTeam, meta.map.id, meta.teams, master]);
   if (key === roomKey) return;
   roomKey = key;
+  for(const button of $('team-count').children) {
+    const selected=Number(button.dataset.count)===meta.teams;
+    button.classList.toggle('sel',selected);button.disabled=!amMaster;
+    button.setAttribute('aria-pressed',String(selected));
+  }
+  $('team-count-note').textContent=amMaster?'· perubahan membatalkan Siap':'· diatur room master';
   // pilihan peta: hanya room master (status siap semua pemain direset saat diganti)
   const maps = $('maps');
   maps.innerHTML = '';
@@ -399,7 +417,7 @@ function doJoin() {
 $('join').onclick = doJoin;
 $('name').addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
 
-let snapCount = 0;
+let joinRosterKey = '';
 function onSnap(m) {
   m.rt = performance.now();
   m.Um = new Map(m.U.map(u => [u[0], u]));
@@ -428,7 +446,10 @@ function onSnap(m) {
   }
   prevBullets = cur;
   for (const e of m.ev) onEvent(e);
-  if (!joined && ++snapCount % 30 === 0) renderTeamButtons();
+  if (!joined) {
+    const key=m.PL.map(p=>p[0]+':'+p[2]).join('|');
+    if(key!==joinRosterKey){joinRosterKey=key;renderTeamButtons();}
+  }
   updateRoom();
   updateOrders();
   updateTouch();
@@ -542,6 +563,10 @@ function onEvent(e) {
       banner = latest && latest.A ? null : { name: e.name, d: e.d, t: 4 };
       pushFeed(`<b style="color:#ffb347">${esc(e.name)}</b> ${esc(e.d)}`);
       tone(880, 0.15, 0.08, 'square'); tone(660, 0.15, 0.08, 'square', 0, 0.18); tone(880, 0.25, 0.08, 'square', 0, 0.36);
+      break;
+    case 'teamcfg':
+      pushFeed(`${esc(e.n)} mengubah ruang menjadi <b style="color:#f6c453">${e.count} tim</b>`);
+      chatLine(null, `${e.n} mengubah ruang menjadi ${e.count} tim`);
       break;
     case 'mapset':
       pushFeed(`${esc(e.n)} memilih peta <b style="color:#f6c453">${esc(e.name)}</b>`);
@@ -1248,7 +1273,7 @@ function buildWorld() {
     },
     mat: {},
     units: new Map(), crates: new Map(), bullets: new Map(), pickups: new Map(), meteors: new Map(), airdrops: new Map(), hq: [],
-    root: new THREE.Group(), mapId: meta.map.id,
+    root: new THREE.Group(), mapId: meta.map.id, teamCount: meta.teams,
   };
   W.arenaView = new ArenaEventView(scene, spawnP, () => Q, hAt);
   scene.add(W.root);
@@ -1300,7 +1325,7 @@ function buildWorld() {
   W.mat.treadTex = texTread();
   W.mat.tread = new THREE.MeshStandardMaterial({ map: W.mat.treadTex, roughness: 0.9 });
   W.mat.glass = new THREE.MeshStandardMaterial({ color: '#2a3a48', roughness: 0.1, metalness: 0.6, transparent: true, opacity: 0.75 });
-  W.mat.wheelGeo = new THREE.CylinderGeometry(1, 1, 1, 12).rotateX(Math.PI / 2);
+  W.geo.wheel = new THREE.CylinderGeometry(1, 1, 1, 12).rotateX(Math.PI / 2);
 
   // tanah
   const outerTex = texGrassTile(); outerTex.repeat.set(40, 40);
@@ -1389,6 +1414,23 @@ function buildWorld() {
   });
   trunks.castShadow = leaves.castShadow = true;
   W.root.add(trunks, leaves);
+  W.sharedGeometry=new Set(Object.values(W.geo));
+  W.sharedMaterial=new Set(Object.values(W.mat).flat().filter(v=>v.isMaterial));
+  W.sharedTexture=new Set(Object.values(W.mat).flat().filter(v=>v.isTexture));
+  for(const m of W.sharedMaterial)for(const key of ['map','bumpMap','emissiveMap'])if(m[key])W.sharedTexture.add(m[key]);
+  W.lootBatches = {
+    wood:new InstanceBatch(W.root,W.geo.crate,W.mat.crate,64,true),
+    metal:new InstanceBatch(W.root,W.geo.crate,W.mat.metalCrate,32,true),
+    band:new InstanceBatch(W.root,W.geo.metalBand,W.mat.metal,32,true),
+    cross:new InstanceBatch(W.root,W.geo.metalCross,W.mat.metal,32,true),
+    shadow:new InstanceBatch(W.root,W.geo.blob,W.mat.blob,64),
+    pickup:new InstanceBatch(W.root,W.geo.pickupBox,W.mat.pickupBody,32,true),
+    pickupBands:W.mat.pickupBands.map(m=>new InstanceBatch(W.root,W.geo.pickupBand,m,8)),
+    pickupGlows:W.mat.pickupGlows.map(m=>new InstanceBatch(W.root,W.geo.ring,m,8)),
+    bullets:new InstanceBatch(W.root,W.geo.bullet,W.mat.bullet,128),
+    lasers:new InstanceBatch(W.root,W.geo.bullet,W.mat.laser,32),
+  };
+  W.slowBullets=[]; W.batchList=Object.values(W.lootBatches).flat();
   return W;
 }
 // buang dunia lama (saat ganti peta) termasuk geometri/tekstur GPU-nya
@@ -1507,7 +1549,7 @@ function makeVehicle(u) {
     for (const [z, m] of [[-15.5, t1], [15.5, t2]]) {
       hull.add(boxAt(50, 12, 8, 0, 7, z, m));
       for (let i = -2; i <= 2; i++) { // roda dalam rantai
-        const w = new THREE.Mesh(M.wheelGeo, M.dark); w.scale.set(4.4, 4.4, 8.4); w.position.set(i * 9.5, 5, z); hull.add(w); d.wheels.push(w);
+        const w = new THREE.Mesh(world.geo.wheel, M.dark); w.scale.set(4.4, 4.4, 8.4); w.position.set(i * 9.5, 5, z); hull.add(w); d.wheels.push(w);
       }
     }
     d.treads = [t1.map, t2.map];
@@ -1527,7 +1569,7 @@ function makeVehicle(u) {
     hull.add(boxAt(2, 12, 2, -12, 21, -10, M.metalLight), boxAt(2, 12, 2, -12, 21, 10, M.metalLight), boxAt(2, 2, 22, -12, 27, 0, M.metalLight));
     hull.add(boxAt(6, 4, 22, 20, 9, 0, M.dark));                   // bemper
     for (const [x, z] of [[12, -12], [12, 12], [-12, -12], [-12, 12]]) {
-      const w = new THREE.Mesh(M.wheelGeo, M.dark); w.scale.set(6.5, 6.5, 6); w.position.set(x, 6.5, z); w.castShadow = true;
+      const w = new THREE.Mesh(world.geo.wheel, M.dark); w.scale.set(6.5, 6.5, 6); w.position.set(x, 6.5, z); w.castShadow = true;
       hull.add(w); d.wheels.push(w);
     }
     head.position.set(-3, 22, 0);
@@ -1584,9 +1626,49 @@ function animMonster(d, u, a, dt) {
   if (u.rage && Math.random() < 0.3 * Q.particles) spawnP(u.x, u.y, 80, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, 40, 0.8, 5, '#ff6a3a');
 }
 
+function disposeModel(root) {
+  const geometries=new Set(),materials=new Set(),textures=new Set();
+  root.traverse(o=>{
+    if(o.isInstancedMesh)o.dispose();
+    if(o.geometry&&!world.sharedGeometry.has(o.geometry))geometries.add(o.geometry);
+    for(const m of [].concat(o.material||[]))if(!world.sharedMaterial.has(m))materials.add(m);
+  });
+  for(const m of materials){for(const key of ['map','bumpMap','emissiveMap'])if(m[key]&&!world.sharedTexture.has(m[key]))textures.add(m[key]);m.dispose();}
+  geometries.forEach(g=>g.dispose());textures.forEach(t=>t.dispose());
+}
+const batchTransform=new THREE.Object3D();
+function batchMatrix(x,y,z,rx=0,ry=0,rz=0,sx=1,sy=sx,sz=sx) {
+  batchTransform.position.set(x,y,z);batchTransform.rotation.set(rx,ry,rz);batchTransform.scale.set(sx,sy,sz);
+  batchTransform.updateMatrix();return batchTransform.matrix;
+}
+function updateLootBatches(W,S) {
+  const B=W.lootBatches,all=W.batchList;all.forEach(b=>b.reset());
+  for(const c of S.crates) {
+    const h=hAt(c.x,c.y),fall=!c.pad&&c.z>60;
+    const matrix=batchMatrix(c.x,h+c.z+meta.map.crateH/2,c.y,fall?Math.sin(c.id)*0.3:0,fall?c.z*0.01+c.id:0,fall?Math.cos(c.id)*0.3:0);
+    (c.metal?B.metal:B.wood).put(matrix);
+    if(c.metal){B.band.put(matrix);B.cross.put(matrix);}
+    if(!c.pad||c.z<1)B.shadow.put(batchMatrix(c.x,h+0.8,c.y,0,0,0,20*(1-Math.min(c.z,560)/900)));
+  }
+  for(const p of S.pickups) {
+    const h=hAt(p[1],p[2]);
+    const matrix=batchMatrix(p[1],h+18+Math.sin(time*4+p[0])*3,p[2],0,time*1.8);
+    B.pickup.put(matrix);B.pickupBands[p[3]].put(matrix);
+    B.pickupGlows[p[3]].put(batchMatrix(p[1],h+1,p[2],-Math.PI/2,0,0,14));
+  }
+  W.slowBullets.length=0;
+  for(const b of S.bullets) {
+    if(b.rocket!==0&&b.rocket!==5){W.slowBullets.push(b);continue;}
+    const dx=b.x-b.px,dy=b.y-b.py,l=Math.hypot(dx,dy)||1,laser=b.rocket===5;
+    const len=laser?Math.max(20,Math.min(60,l)):Math.max(6,Math.min(30,l));
+    (laser?B.lasers:B.bullets).put(batchMatrix(b.x-dx/l*len/2,hAt(b.x,b.y)+GUN_H,b.y-dy/l*len/2,0,-Math.atan2(dy,dx),0,len,laser?2.6:1.8,laser?2.6:1.8));
+  }
+  all.forEach(b=>b.finish());
+}
+
 // sinkronkan Map id → mesh dengan daftar dari snapshot
 function sync(pool, list, keyOf, make, update) {
-  const seen = new Set();
+  const seen = pool.seen || (pool.seen = new Set()); seen.clear();
   for (const it of list) {
     const k = keyOf(it);
     seen.add(k);
@@ -1596,7 +1678,7 @@ function sync(pool, list, keyOf, make, update) {
   }
   for (const [k, o] of pool) if (!seen.has(k)) {
     scene.remove(o);
-    disposeEncounter(o);
+    disposeModel(o);
     pool.delete(k);
   }
 }
@@ -1645,45 +1727,10 @@ function updateWorld(S, me, dt) {
     d.shield.visible = !!u.shield;
     if (u.shield) W.mat.shield.opacity = 0.2 + Math.sin(time * 20) * 0.1;
   });
-  // peti
-  sync(W.crates, S.crates, c => c.id + (c.metal ? ":metal" : ":wood"), c => {
-    const g = new THREE.Group();
-    const m = new THREE.Mesh(W.geo.crate, c.metal ? W.mat.metalCrate : W.mat.crate); m.castShadow = m.receiveShadow = true;
-    const s = blob(20);
-    if (c.metal) {
-      const band = new THREE.Mesh(W.geo.metalBand, W.mat.metal); m.add(band);
-      const cross = new THREE.Mesh(W.geo.metalCross, W.mat.metal); m.add(cross);
-    }
-    g.add(m, s); g.userData = { m, s };
-    return g;
-  }, (g, c) => {
-    const { m, s } = g.userData;
-    g.position.set(c.x, hAt(c.x, c.y), c.y);
-    m.position.y = c.z + meta.map.crateH / 2;
-    s.visible = !c.pad || c.z < 1; // peti tingkat 2 di pad tidak butuh bayangan sendiri
-    s.scale.setScalar(20 * (1 - Math.min(c.z, 560) / 900));
-    const fall = !c.pad && c.z > 60;
-    m.rotation.set(fall ? Math.sin(c.id) * 0.3 : 0, fall ? c.z * 0.01 + c.id : 0, fall ? Math.cos(c.id) * 0.3 : 0);
-  });
+  updateLootBatches(W,S);
   sync(W.airdrops, latest.D || [], d => d[0], makeAirdrop, (o, d) => animateAirdrop(o, d, hAt, meta.colors, time));
-  // senjata tergeletak
-  sync(W.pickups, S.pickups, p => p[0], p => {
-    const g = new THREE.Group();
-    const box = new THREE.Mesh(W.geo.pickupBox, W.mat.pickupBody);
-    const band = new THREE.Mesh(W.geo.pickupBand, W.mat.pickupBands[p[3]]);
-    box.castShadow = true;
-    const glow = new THREE.Mesh(W.geo.ring, W.mat.pickupGlows[p[3]]);
-    glow.rotation.x = -Math.PI / 2; glow.scale.setScalar(14); glow.position.y = 1;
-    const spin = new THREE.Group(); spin.add(box, band);
-    g.add(spin, glow); g.userData = { spin };
-    return g;
-  }, (g, p) => {
-    g.position.set(p[1], hAt(p[1], p[2]), p[2]);
-    g.userData.spin.position.y = 18 + Math.sin(time * 4 + p[0]) * 3;
-    g.userData.spin.rotation.y = time * 1.8;
-  });
   // peluru
-  sync(W.bullets, S.bullets, b => b.id + ':' + b.rocket, b => {
+  sync(W.bullets, W.slowBullets, b => b.id + ':' + b.rocket, b => {
     // rocket = jenis: 0 peluru, 1 roket/meriam, 2 batu lemparan monster, 3 api, 4 granat, 5 laser
     const ty = b.rocket;
     const m = ty === 2 ? new THREE.Mesh(W.geo.rock, W.mat.rock)

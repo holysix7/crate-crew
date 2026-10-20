@@ -67,7 +67,7 @@
     <div class="card">
       <h1>CRATE<span>CREW</span></h1>
       <p class="sub">Fan-remake LAN · terinspirasi Team Buddies (PS1)</p>
-      <button type="button" class="patch-launch" data-patch-notes><span>BARU · 20 OKT 2026</span><b>Chaos &amp; Loot</b><small>6 peta besar · Kontrol event · Kereta &amp; MBG → Patch notes</small></button>
+      <button type="button" class="patch-launch" data-patch-notes><span>BARU · 20 OKT 2026</span><b>Chaos &amp; Loot</b><small>6 peta besar · 2–4 tim · Event pilihan · Optimasi → Patch notes</small></button>
 
       <div id="join-view">
         <label for="name">Nama</label>
@@ -83,6 +83,8 @@
       </div>
 
       <div id="room-view" hidden>
+        <label>Jumlah tim <small id="team-count-note" class="muted"></small></label>
+        <div id="team-count" class="teams" aria-label="Jumlah tim"><button type="button" data-count="2">2 tim</button><button type="button" data-count="3">3 tim</button><button type="button" data-count="4">4 tim</button></div>
         <label>Peta <small id="maps-note" class="muted"></small></label>
         <div id="maps" class="teams map-cards"></div>
         <p id="map-description" class="muted map-description"></p>
@@ -119,7 +121,7 @@
           <p><b>Naga (5 detik):</b> hindari koridor oranye. Tunggu api padam sebelum mengambil peti di belakang naga.</p>
           <p><b>Tsunami (7 detik):</b> naik bagian dalam bukit hijau. Peti yang terbawa arus tidak dapat diambil selama gelombang; setelah surut muncul lagi bersama bonus, <b>tersebar simetris di tengah arena</b>.</p>
         </details>
-        <p>Ronde dimulai saat semua pemain menekan <b>Siap</b>. Pemain pertama yang masuk jadi <b>room master</b> 👑: memilih peta, mengatur CPU, dan bisa mengeluarkan pemain (tombol ✕ atau chat <code>/kick nama</code>). Hancurkan markas musuh untuk menang. Peti di pad musuh bisa dicuri!</p>
+        <p>Ronde dimulai saat semua pemain menekan <b>Siap</b>. Pemain pertama yang masuk jadi <b>room master</b> 👑: memilih peta, jumlah tim (2–4), event, CPU, dan bisa mengeluarkan pemain (tombol ✕ atau chat <code>/kick nama</code>). Hancurkan markas musuh untuk menang. Peti di pad musuh bisa dicuri!</p>
         <p><b>8 peti</b> juga bisa jadi <b>Tank</b> (lambat, tebal, meriam) atau <b>Jeep</b> (cepat, senapan mesin, bisa menabrak). Dekati kendaraan timmu lalu tekan <kbd>E</kbd> untuk naik/turun.</p>
         <p><b>Perintah tim</b> (panel kiri): apa yang dirakit (<kbd>1</kbd> otomatis/pola · <kbd>2</kbd> senjata · <kbd>3</kbd> Buddy · <kbd>4</kbd> Turret · <kbd>5</kbd> Tank · <kbd>6</kbd> Jeep), lalu tugas pasukan (<kbd>Z</kbd> ikuti aku · <kbd>X</kbd> bertahan · <kbd>C</kbd>…<kbd>N</kbd> serang markas tertentu).</p>
         <p class="keys"><kbd>WASD</kbd> gerak · <kbd>Mouse</kbd> bidik · <kbd>Klik</kbd> tembak · <kbd>E</kbd> angkat/taruh · <kbd>F</kbd>/<kbd>Klik kanan</kbd> lempar · <kbd>Q</kbd> rakit · <kbd>R</kbd> resep · <kbd>Enter</kbd> chat · <kbd>Tab</kbd> skor · <kbd>M</kbd> suara · <kbd>G</kbd> grafis</p>
@@ -135,7 +137,7 @@
       <button type="button" id="patch-close" aria-label="Tutup patch notes" autofocus>✕</button>
     </header>
     <div class="patch-body">
-      <p id="patch-intro">Enam peta besar, simetris untuk empat tim! Pilih medan pertempuran, atur event sebagai room master, lalu berebut loot di arena yang lebih luas.</p>
+      <p id="patch-intro">Enam peta besar, pilihan 2–4 tim, dan permainan lebih ringan! Pilih medan pertempuran, atur event sebagai room master, lalu berebut loot di arena yang lebih luas.</p>
       <h3>6 medan pertempuran · 2,25× luas arena lama</h3>
       <ul class="patch-list">
         <li><b>Lembah Benteng:</b> rumput hijau, benteng berlapis, banyak bukit dan rute sayap.</li>
@@ -168,6 +170,7 @@
       </ul>
       <h3>Lebih adil &amp; lebih terbaca</h3>
       <ul class="patch-list">
+        <li><b>Pilih 2, 3, atau 4 tim:</b> room master mengubah jumlah tim di lobby. Pemain dari tim yang ditutup dipindah ke tim tersisa dengan anggota paling sedikit. Perubahan membatalkan Siap/hitung mundur; peta, CPU, dan pilihan event tetap tersimpan.</li>
         <li><b>Kontrol room master:</b> di lobby, nyalakan/matikan semua event acak atau pilih event satu per satu. Semua pemain melihat pengaturan yang sama; perubahan membatalkan Siap. Pilihan disimpan antar-ronde, ganti peta, dan pergantian master.</li>
         <li>Tsunami membagi ulang kayu dan metal secara seimbang di tengah; senjata langka tetap di tempat agar tidak terkumpul di satu sisi.</li>
         <li>Event besar punya hitung mundur, petunjuk di layar, dan penanda minimap. Satu event besar aktif pada satu waktu.</li>
@@ -182,6 +185,9 @@
       </ul>
       <h3>Lebih ringan untuk dimainkan</h3>
       <ul class="patch-list">
+        <li>Tumpukan peti, banyak pickup, dan hujan peluru kini lebih ringan digambar. Senjata, kendaraan, dan efek yang hilang dibersihkan agar permainan lama tidak terus menumpuk resource.</li>
+        <li>Update dunia memakai lebih sedikit data jaringan; gerakan tetap dihaluskan di layar, dan simulasi tetap 30 kali per detik. Perubahan aturan ruang dan pergantian fase dikirim segera.</li>
+        <li>Input yang tidak berubah tidak terus dikirim ulang; input gerak, bidikan, tembakan, dan aksi yang berubah tetap dikirim seperti biasa.</li>
         <li>Tembok statis digabung menjadi satu mesh, detail tanah dan ukuran tekstur dibatasi, geometri/grid peta disimpan, dan pencarian jalur bot memakai ulang memori agar arena besar tetap ringan.</li>
         <li>Unduhan awal lebih kecil dan kunjungan ulang memakai aset yang sudah tersimpan. File game yang berubah tetap diperbarui saat dimuat ulang.</li>
         <li>Senjata, Buddy, dan pickup memakai ulang bentuk yang sama agar tumpukan loot lebih ringan. Aset dibersihkan saat peta diganti.</li>

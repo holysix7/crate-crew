@@ -24,7 +24,7 @@ Hanya room master yang bisa mengubahnya, dan server menolak permintaan pemain la
 
 Sakelar utama mematikan semua undian event tanpa menghapus pilihan per event; nyalakan lagi untuk memakai pilihan yang sama. Menonaktifkan seluruh pilihan juga menghasilkan pertandingan tanpa event acak. Peti rutin dan monster penjaga tetap bagian dari permainan biasa.
 
-Pilihan bertahan saat ganti peta, ronde baru, master diserahkan, atau master keluar. Server baru mulai dengan semua event aktif. Event yang dimatikan tidak bisa dipilih undian maupun dipaksa lewat preview host; `EVENT_PREVIEW=train,mbg` melewati train bila train dimatikan. Bila semua preview dimatikan, permainan memakai interval normal untuk event yang masih aktif.
+Pilihan bertahan saat ganti peta, jumlah tim (2–4), ronde baru, master diserahkan, atau master keluar. Perubahan jumlah tim dilakukan room master di lobby; pemain pada tim yang ditutup dipindah secara seimbang dan semua Siap dibatalkan. Server baru mulai dengan semua event aktif. Event yang dimatikan tidak bisa dipilih undian maupun dipaksa lewat preview host; `EVENT_PREVIEW=train,mbg` melewati train bila train dimatikan. Bila semua preview dimatikan, permainan memakai interval normal untuk event yang masih aktif.
 
 ## Kereta Ngepot
 

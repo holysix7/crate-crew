@@ -1,6 +1,6 @@
 # Enam arena besar
 
-Room master memilih peta di lobby. Keenam kartu menampilkan geometri sebenarnya: empat markas berwarna, tembok, bukit, lubang, kanal, dan jembatan. Mengganti peta membatalkan Ready; pilihan event disimpan.
+Room master memilih peta dan jumlah tim (2–4) di lobby. Menutup tim memindahkan pemainnya ke tim tersisa dengan anggota paling sedikit; semua Ready/countdown dibatalkan. Peta, CPU, dan pilihan event disimpan. Keenam kartu menampilkan geometri sebenarnya: empat markas berwarna, tembok, bukit, lubang, kanal, dan jembatan. Mengganti peta membatalkan Ready; pilihan event disimpan.
 
 Setiap peta berukuran **72 × 54 petak**, atau **2880 × 2160 unit**; luas **2,25×** arena sebelumnya (48 × 36). Bentuk arena bukan persegi penuh: teluk, tanjung, dan potongan tebing membentuk batas yang berlekuk. Sungai melebar/menyempit dengan tepi berombak. Bentuk ini dipakai collision, routing bot, ground mesh, preview, dan minimap. Semua tembok, bukit, lubang, kanal, dan jembatan dicerminkan pada sumbu horizontal dan vertikal. Keempat posisi spawn berjarak sama dari pusat. Ruangan dengan 2, 3, atau 4 tim memakai arena yang sama; CPU bisa mengisi tim kosong.
 
@@ -19,7 +19,7 @@ Setiap peta berukuran **72 × 54 petak**, atau **2880 × 2160 unit**; luas **2,2
 
 ## Verifikasi
 
-`node --test` mencakup pencerminan geometri, jarak spawn, akses pad dan markas, koridor muat kendaraan, bukit yang dapat dicapai, kematian karena kanal, keselamatan jembatan, dan rel kereta di setiap peta. Ke-12 event dijalankan sampai selesai pada keenam peta dengan empat tim; suite event yang sudah ada juga diperluas ke 2, 3, dan 4 tim pada semua peta. Distribusi kayu/metal tsunami dicek simetris dan aman pada seluruh kombinasi peta/tim.
+`node --test` mencakup pencerminan geometri, jarak spawn, akses pad dan markas, koridor muat kendaraan, bukit yang dapat dicapai, kematian karena kanal, keselamatan jembatan, dan rel kereta di setiap peta. Ke-12 event dijalankan sampai selesai pada keenam peta untuk masing-masing 2, 3, dan 4 tim (216 kombinasi); suite event yang sudah ada juga memakai seluruh peta/jumlah tim. Distribusi kayu/metal tsunami dicek simetris dan aman pada seluruh kombinasi peta/tim.
 
 Browser Chrome memeriksa pemilihan master → WebSocket → server → welcome baru → render dunia dan preview pada dua client. Guest tidak dapat mengganti peta; pilihan event bertahan. Screenshot mencakup enam tampilan arena, lobby, mobile, serta sudut permainan di sungai/jurang. Tampilan seluruh arena memakai kamera overview khusus fixture screenshot; kamera permainan tetap mengikuti pemain seperti biasa.
 

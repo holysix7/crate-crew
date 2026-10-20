@@ -49,7 +49,8 @@ test('changing an event setting cancels countdown and clears every player Ready 
   host.p.ready = guest.p.ready = true; g.lobbyTick(0.01); assert.equal(g.state, 'countdown');
   change(host, { kind: 'meteor', enabled: false });
   assert.equal(g.state, 'lobby'); assert.equal(g.countdown, 0); assert.equal(host.p.ready, false); assert.equal(guest.p.ready, false);
-  assert.ok(g.events.some(e => e.k === 'eventcfg' && e.name === 'Hujan Meteor' && e.v === false));
+  for (const client of [host, guest]) assert.ok(client.messages.filter(m => m.t === 's').at(-1).ev.some(e => e.k === 'eventcfg' && e.name === 'Hujan Meteor' && e.v === false));
+  assert.equal(g.events.length, 0); // delivered immediately, rather than waiting in the queue
 });
 
 test('match messages cannot change settings; choices persist through map, rounds, and master handover', () => {

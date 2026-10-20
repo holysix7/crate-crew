@@ -78,16 +78,16 @@ test('every planned train route clears interior walls, HQs and terrain death zon
   }
 });
 
-test('all twelve events complete on all six arenas with four active teams', () => {
-  for(let i=0;i<MAPS.length;i++) for(const {id:kind} of EVENT_OPTIONS) {
-    const g=arena(i);
+test('all twelve events complete on all six arenas with 2, 3 and 4 active teams', () => {
+  for(const teams of [2,3,4]) for(let i=0;i<MAPS.length;i++) for(const {id:kind} of EVENT_OPTIONS) {
+    const g=arena(i,teams);
     assert.equal(g.randomEvent(kind),true,`${MAPS[i].id}/${kind}`);
     if(g.arenaEvents.active) {
       const e=g.arenaEvents.active;
       for(let n=0;n<Math.ceil((e.warn+e.duration+0.1)*30);n++) g.tick();
       assert.equal(g.arenaEvents.active,null,`${MAPS[i].id}/${kind} never finishes`);
     } else for(let n=0;n<500;n++)g.tick();
-    assert.equal(g.bases.length,4);assert.equal(g.state,'playing');
+    assert.equal(g.bases.length,teams);assert.equal(g.state,'playing');
     for(const p of g.pickups.values())assert.ok(g.encounters.validSpot(p.x,p.y,10),`${MAPS[i].id}/${kind}: unsafe gun`);
     assert.ok([...g.units.values()].every(u=>Number.isFinite(u.x)&&Number.isFinite(u.y)));
     g.toLobby();assert.equal(g.arenaEvents.active,null);
