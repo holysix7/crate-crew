@@ -2,6 +2,7 @@
 // Dunia dirender 3D (WebGL / three.js, ada di public/vendor); HUD & label digambar di kanvas 2D di atasnya.
 // Semua tekstur digambar lewat kode (canvas), tanpa file gambar.
 import * as THREE from './vendor/three.module.min.js';
+import { HAZARD_COLORS, groundHeight, drawMapPreview } from './terrain.js';
 import { ArenaEventView, EVENT_COLORS, drawArenaMinimap } from './arena-events.js';
 import { makeUfo, makeChicken, makeLord, animateEncounter, makeAirdrop, animateAirdrop, disposeEncounter } from './encounters.js';
 
@@ -245,7 +246,7 @@ function updateRoom() {
   const [cpu, cd, active] = latest.lb;
   const me = latest.PL.find(p => p[0] === myId);
   const master = latest.ms, amMaster = master === myId;
-  const key = JSON.stringify([latest.PL.map(p => [p[0], p[1], p[2], p[7]]), latest.lb, latest.st, myTeam, meta.map.id, master]);
+  const key = JSON.stringify([latest.PL.map(p => [p[0], p[1], p[2], p[7]]), latest.lb, latest.es, latest.st, myTeam, meta.map.id, master]);
   if (key === roomKey) return;
   roomKey = key;
   // pilihan peta: hanya room master (status siap semua pemain direset saat diganti)
@@ -253,12 +254,19 @@ function updateRoom() {
   maps.innerHTML = '';
   (meta.maps || []).forEach((mp, i) => {
     const b = document.createElement('button');
-    b.textContent = mp.name;
+    const preview = document.createElement('canvas'); preview.width = 192; preview.height = 144;
+    preview.setAttribute('aria-hidden', 'true');
+    drawMapPreview(preview, { ...mp.preview, w: mp.w, h: mp.h, theme: mp.theme }, ['#e5484d','#3e7bfa','#30a46c','#f5b400']);
+    const title = document.createElement('strong'); title.textContent = mp.name;
+    const tag = document.createElement('small'); tag.textContent = mp.tag;
+    b.append(preview, title, tag); b.title = mp.desc;
+    b.setAttribute('aria-pressed', String(mp.id === meta.map.id));
     if (mp.id === meta.map.id) b.classList.add('sel');
     b.disabled = !amMaster && mp.id !== meta.map.id;
     b.onclick = () => { if (amMaster) send({ t: 'map', i }); };
     maps.appendChild(b);
   });
+  $('map-description').textContent = `${meta.map.desc} · 72 × 54 petak · simetris 4 tim`;
   const mName = (latest.PL.find(p => p[0] === master) || [])[1];
   $('maps-note').textContent = amMaster ? '· kamu room master 👑' : mName ? `· dipilih room master (${mName})` : '';
   const room = $('room');
@@ -284,6 +292,7 @@ function updateRoom() {
   });
   $('cpu').checked = !!cpu;
   $('cpu').disabled = !amMaster;
+  updateEventOptions(amMaster, mName);
   const ready = !!(me && me[7]);
   $('ready').textContent = ready ? 'BATAL SIAP' : 'SIAP!';
   $('ready').classList.toggle('on', ready);
@@ -297,6 +306,30 @@ $('ready').onclick = () => {
   send({ t: 'ready', v: !(me && me[7]) });
 };
 $('cpu').onchange = e => send({ t: 'cpu', v: e.target.checked });
+$('events-enabled').onchange = e => send({ t: 'events', enabled: e.target.checked });
+function updateEventOptions(amMaster, masterName) {
+  const options = meta.eventOptions || [], state = latest.es || [1, 0];
+  $('room-events').hidden = !options.length;
+  const [enabled, mask] = state, box = $('event-options');
+  const signature = options.map(option => option.id).join(',');
+  if (box.dataset.options !== signature) {
+    box.replaceChildren(); box.dataset.options = signature;
+    for (const option of options) {
+      const label = document.createElement('label'), input = document.createElement('input');
+      input.type = 'checkbox'; input.dataset.event = option.id;
+      input.onchange = () => send({ t: 'events', kind: option.id, enabled: input.checked });
+      label.append(input, document.createTextNode(option.name)); box.append(label);
+    }
+  }
+  $('events-enabled').checked = !!enabled;
+  $('events-enabled').disabled = !amMaster;
+  box.disabled = !amMaster || !enabled;
+  box.querySelectorAll('input').forEach((input, i) => { input.checked = !!(mask & (1 << i)); });
+  const count = options.filter((_, i) => mask & (1 << i)).length;
+  $('events-count').textContent = enabled ? `${count}/${options.length} aktif` : 'Semua mati';
+  $('events-note').textContent = amMaster ? 'Khusus lobby · perubahan membatalkan Siap semua pemain.'
+    : `Diatur room master${masterName ? ' (' + masterName + ')' : ''} · hanya bisa diubah di lobby.`;
+}
 
 // ---------------- perintah tim ----------------
 const BUILD_OPTS = [['auto', 'Otomatis · pola'], ['weapon', 'Senjata · pola/1'], ['buddy', 'Buddy · 4 peti'],
@@ -538,6 +571,7 @@ function onEvent(e) {
     case 'board': burst(e.x, e.y, 10, 6, '#cccccc', 50, 0.4, 3, 20); sfx.pick(); break;
     case 'start': pushFeed('<b style="color:#f6c453">Ronde dimulai!</b> Kumpulkan peti untuk merakit Buddy.'); if (joined) sfx.build(); break;
     case 'cpu': pushFeed(`${esc(e.n)} ${e.v ? 'menyalakan' : 'mematikan'} CPU untuk tim kosong`); break;
+    case 'eventcfg': pushFeed(`${esc(e.n)} ${e.v ? 'mengaktifkan' : 'mematikan'} ${esc(e.name)}`); break;
     case 'order':
       if (e.t === myTeam) pushFeed(`<b style="color:${tcol(e.t)}">${esc(e.n)}</b>: ${esc(e.txt)}`);
       break;
@@ -844,9 +878,11 @@ function sampleState() {
 
 // ---------------- tekstur prosedural ----------------
 function rng(seed) { return () => (seed = (seed * 16807) % 2147483647) / 2147483647; }
-function makeTex(w, h, draw, repeat = false) {
-  const c = document.createElement('canvas'); c.width = w; c.height = h;
-  draw(c.getContext('2d'), w, h);
+function makeTex(w, h, draw, repeat = false, limit = Infinity) {
+  const c = document.createElement('canvas'), scale = Math.min(1, limit / Math.max(w, h));
+  c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+  const context = c.getContext('2d'); context.scale(c.width / w, c.height / h);
+  draw(context, w, h);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = ANISO;
@@ -1018,6 +1054,9 @@ const THEMES = {
     dirt: '120,130,145', outer: '#dfe7ef', outerSpeck: ['#c8d4e0', '#ffffff', '#b8c8d8'], outerTint: '#ffffff', leaf: [0.4, 0.35, 0.22],
     sky: '#c9d8e6', zone: ['#bcc8d3', '#adbac6', '#8d9aa8'], grain: ['#98a6b4', '#e4ecf2'] },
 };
+THEMES.river = { ...THEMES.grass, stripes: ['#487e5d','#427557'], sky:'#a8d0d5', outerTint:'#a9cebd' };
+THEMES.ruins = { ...THEMES.grass, stripes: ['#777d72','#6c746a'], speck: ['#515952','#9b9f90'], sky:'#c0c6c6', zone:['#c9bda2','#b3a78e','#958b74'], outerTint:'#b3bcb2' };
+THEMES.volcano = { ...THEMES.desert, stripes: ['#51484b','#494145'], speck:['#2c292f','#736062','#a06a50'], sky:'#c18c77', zone:['#b99573','#9b7b61','#775d50'], outer:'#4b4142', outerTint:'#9c7c75' };
 const theme = () => THEMES[meta.map.theme] || THEMES.grass;
 
 // Tinggi tanah dari bukit (sama dengan rumus server) — dipakai untuk menaruh unit, peti, peluru, label
@@ -1027,18 +1066,9 @@ function hAt(x, y) {
   return h;
 }
 // Tinggi permukaan mesh tanah: bukit + lubang (dinding curam, dasar gelap)
-const PIT_DEPTH = 90;
-function groundY(x, y) {
-  let h = hAt(x, y);
-  for (const p of meta.map.pits || []) {
-    const d = Math.hypot(x - p.x, y - p.y);
-    if (d < p.r - 6) h -= PIT_DEPTH;
-    else if (d < p.r + 10) h -= PIT_DEPTH * (0.5 + 0.5 * Math.cos(Math.PI * (d - (p.r - 6)) / 16));
-  }
-  return h;
-}
+function groundY(x, y) { return groundHeight(meta.map, x, y); }
 
-// Tanah peta: satu tekstur besar (1 piksel = 1 unit dunia)
+// One ground texture with a bounded pixel budget, drawn in world coordinates.
 function texGround() {
   const { w, h, tile: T, bases, walls } = meta.map;
   const th = theme();
@@ -1129,7 +1159,7 @@ function texGround() {
     for (const wl of walls) c.fillRect(wl.x - 5, wl.y - 5, wl.w + 10, wl.h + 10);
     for (const b of bases) c.fillRect(b.hq.x - 6, b.hq.y - 6, b.hq.w + 12, b.hq.h + 12);
     c.filter = 'none';
-  });
+  }, false, 2048);
 }
 
 // UV berbasis koordinat dunia supaya tekstur berulang dengan skala tetap di balok ukuran apa pun
@@ -1152,6 +1182,43 @@ function boxAt(w, h, d, x, y, z, mat, uvScale) {
   const m = new THREE.Mesh(g, mat);
   m.castShadow = m.receiveShadow = true;
   return m;
+}
+
+// Merge static boxes with matching material. Dispose the temporary geometry immediately.
+function mergedBoxes(boxes, material, uvScale = 64) {
+  const positions = new Float32Array(boxes.length * 36 * 3), normals = new Float32Array(positions.length), uvs = new Float32Array(boxes.length * 36 * 2);
+  boxes.forEach(([w,h,d,x,y,z], i) => {
+    const indexed = new THREE.BoxGeometry(w,h,d).translate(x,y,z);
+    worldUV(indexed, uvScale); const g = indexed.toNonIndexed(); indexed.dispose();
+    positions.set(g.attributes.position.array, i*108); normals.set(g.attributes.normal.array, i*108); uvs.set(g.attributes.uv.array, i*72); g.dispose();
+  });
+  const g = new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(positions,3));
+  g.setAttribute('normal',new THREE.BufferAttribute(normals,3)); g.setAttribute('uv',new THREE.BufferAttribute(uvs,2)); g.computeBoundingSphere();
+  const mesh = new THREE.Mesh(g, material); mesh.castShadow = mesh.receiveShadow = true; return mesh;
+}
+function addMapTerrain(W) {
+  const decks = [], edges = [], surfaces = [], foam = [], hazards = meta.map.hazards || [];
+  for (const p of hazards) {
+    const lava = p.kind === 'lava', river = p.kind === 'river', y = river ? -18 : -p.depth+4;
+    surfaces.push([p.w,1,p.h,p.x+p.w/2,y,p.y+p.h/2]);
+    // Static foam/heat lines avoid another water simulation and share one draw call.
+    if (river || lava) for (let i=1;i<5;i++) foam.push([p.w*0.8,0.5,2,p.x+p.w/2,y+1,p.y+p.h*i/5]);
+    if (p.kind === 'chasm') for (const x of [p.x,p.x+p.w]) edges.push([12,p.depth,p.h,x,-p.depth/2,p.y+p.h/2]);
+  }
+  if (surfaces.length) {
+    const kind=hazards[0].kind, lava=kind==='lava';
+    W.root.add(mergedBoxes(surfaces,new THREE.MeshStandardMaterial({color:HAZARD_COLORS[kind],roughness:kind==='river'?0.25:0.95,
+      emissive:lava?'#ff4712':'#000000',emissiveIntensity:lava?0.8:0})));
+    if (foam.length) W.root.add(mergedBoxes(foam,new THREE.MeshBasicMaterial({color:lava?'#ffc15b':'#82d1dd',transparent:true,opacity:0.4})));
+  }
+  if (edges.length) W.root.add(mergedBoxes(edges,new THREE.MeshStandardMaterial({color:'#865f46',roughness:1})));
+  for (const p of meta.map.bridges || []) {
+    const alongX=p.w>p.h, length=alongX?p.w:p.h, count=Math.ceil(length/24);
+    for(let i=0;i<count;i++) decks.push(alongX
+      ? [length/count-2,8,p.h,p.x+(i+0.5)*length/count,1,p.y+p.h/2]
+      : [p.w,8,length/count-2,p.x+p.w/2,1,p.y+(i+0.5)*length/count]);
+  }
+  if (decks.length) { const deck=mergedBoxes(decks,new THREE.MeshStandardMaterial({color:'#c5a272',roughness:0.85})); deck.name='arena-bridges'; W.root.add(deck); }
 }
 
 // ---------------- dunia 3D ----------------
@@ -1193,7 +1260,7 @@ function buildWorld() {
   const crateTex = texCrate();
   W.mat.crate = new THREE.MeshStandardMaterial({ map: crateTex, bumpMap: crateTex, bumpScale: 2, roughness: 0.85 });
   const stone = texStone();
-  W.mat.wall = new THREE.MeshStandardMaterial({ map: stone, bumpMap: stone, bumpScale: 2.5, roughness: 0.95 });
+  W.mat.wall = new THREE.MeshStandardMaterial({ map: stone, color: ({desert:'#c8ac8c',snow:'#bbdef1',river:'#a4b8ab',ruins:'#a0a39d',volcano:'#796265'})[meta.map.theme] || '#bac3ae', bumpMap: stone, bumpScale: 2.5, roughness: 0.95 });
   W.mat.suit = texSuit();
   W.mat.dark = new THREE.MeshStandardMaterial({ color: '#23262c', roughness: 0.7 });
   W.mat.visor = new THREE.MeshStandardMaterial({ color: '#141822', roughness: 0.2, metalness: 0.4 });
@@ -1240,7 +1307,7 @@ function buildWorld() {
     outer.add(pl);
   }
   // tanah peta = bidang bergrid yang dinaikkan (bukit) / diturunkan (lubang)
-  const gg = new THREE.PlaneGeometry(w, h, Math.round(w / 16), Math.round(h / 16)).rotateX(-Math.PI / 2).translate(w / 2, 0, h / 2);
+  const gg = new THREE.PlaneGeometry(w, h, Math.round(w / 24), Math.round(h / 24)).rotateX(-Math.PI / 2).translate(w / 2, 0, h / 2);
   const gp = gg.attributes.position;
   for (let i = 0; i < gp.count; i++) gp.setY(i, groundY(gp.getX(i), gp.getZ(i)));
   gg.computeVertexNormals();
@@ -1249,7 +1316,10 @@ function buildWorld() {
   W.root.add(outer, ground);
 
   // tembok
-  for (const wl of walls) W.root.add(boxAt(wl.w, WALL_H, wl.h, wl.x + wl.w / 2, WALL_H / 2, wl.y + wl.h / 2, W.mat.wall, 64));
+  // One static wall mesh preserves world-space UVs while reducing dozens of draw calls.
+  const wallMesh = mergedBoxes(walls.map(p => [p.w,WALL_H,p.h,p.x+p.w/2,WALL_H/2,p.y+p.h/2]), W.mat.wall, 64);
+  wallMesh.name = 'arena-walls'; W.root.add(wallMesh);
+  addMapTerrain(W);
 
   // markas + pad
   const brick = texBrick();
@@ -1951,11 +2021,15 @@ function drawHUD(S, me, dt) {
   const th = theme();
   ctx.fillStyle = th.stripes[1]; ctx.fillRect(mx, my, mw, mh);
   ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(mx, my, mw, mh);
+  ctx.fillStyle = '#182b30'; for (const p of map.outside || []) ctx.fillRect(mx+p.x*k,my+p.y*k,p.w*k,p.h*k);
   ctx.fillStyle = th.zone[2]; ellipse(mx + mw / 2, my + mh / 2, 9.4 * T * k, 9.4 * T * k); ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,.22)';
   for (const hl of map.hills || []) { ellipse(mx + hl.x * k, my + hl.y * k, hl.r * k, hl.r * k); ctx.fill(); }
   ctx.fillStyle = '#0b0806';
   for (const p of map.pits || []) { ellipse(mx + p.x * k, my + p.y * k, p.r * k, p.r * k); ctx.fill(); }
+  for (const p of map.hazards || []) { ctx.fillStyle = HAZARD_COLORS[p.kind]; ctx.fillRect(mx+p.x*k,my+p.y*k,p.w*k,p.h*k); }
+  ctx.fillStyle = '#dfbe84';
+  for (const p of map.bridges || []) ctx.fillRect(mx+p.x*k,my+p.y*k,p.w*k,p.h*k);
   ctx.fillStyle = '#9aa0a8';
   for (const w of map.walls) ctx.fillRect(mx + w.x * k, my + w.y * k, Math.max(1, w.w * k), Math.max(1, w.h * k));
   map.bases.forEach((b, t) => {

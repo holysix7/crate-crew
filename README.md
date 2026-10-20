@@ -50,13 +50,18 @@ Di macOS, saat pertama kali jalan akan muncul dialog firewall *"Allow incoming c
 
 **Kendaraan (8 peti)**: selain Turret, 8 peti bisa dirakit jadi **Tank** (650 HP, lambat, meriam dengan ledakan) atau **Jeep** (280 HP, cepat, senapan mesin, menabrak infanteri musuh). Maks 2 kendaraan per tim. Tanpa pengemudi, kendaraan dikemudikan AI dan mengikuti perintah pasukan. Dekati kendaraan timmu dan tekan **E** untuk naik (WASD menyetir, mouse membidik meriam/senapan), **E** lagi untuk turun. Bila kendaraan hancur, pengemudi terlempar keluar dengan sisa 40 HP. Mode rakit *Otomatis* memilih Turret/Tank/Jeep secara acak saat ada 8 peti.
 
-**Peta** (dipilih di ruang tunggu; semua peta simetris 4 arah supaya adil):
+**Enam peta besar** (dipilih room master di ruang tunggu): setiap arena **72 × 54 petak / 2880 × 2160 unit**, luas **2,25×** peta lama. Batas arena berlekuk, sungai bertepi berombak, dan tebing bertingkat. Semua geometri dicerminkan pada kedua sumbu untuk markas empat sudut yang seimbang; mendukung 2, 3, dan 4 tim.
 
 | Peta | Tema | Ciri |
 |---|---|---|
-| Lembah Hijau | rumput | peta klasik + 8 bukit, 4 lubang |
-| Kawah Meteor | gurun | tembok sedikit, 8 lubang besar, 8 bukit |
-| Perbukitan Salju | salju | 12 bukit, 4 lubang, sangat terbuka |
+| Lembah Benteng | rumput | benteng berlapis, bukit, rute sayap |
+| Ngarai Raksasa | gurun | jurang dalam membelah arena, tiga jembatan |
+| Punggung Es | salju | bukit tinggi, dinding es, celah beku |
+| Sungai Kembar | sungai | air dalam di tengah, tiga penyeberangan |
+| Kota Reruntuhan | kota | blok bangunan sebagai cover, jalan dan gang lebar |
+| Kepulauan Vulkanik | vulkanik | kanal lava, pulau tengah, jembatan empat arah |
+
+Lobby menampilkan preview geometri keenam peta dengan posisi empat markas. **Sungai dalam, lava, dan jurang = tewas**, termasuk tank dan pengemudinya; gunakan jembatan. Bot mencari jalur menghindari semua bahaya. Setiap base punya akses ke tengah, pad aman, dan bukit tsunami yang dapat dicapai. Semua 12 event tetap tersedia. Lihat [panduan peta](docs/MAPS.md) untuk jalur dan detail verifikasi.
 
 * **Bukit**: bisa didaki (gerak 22% lebih lambat), tapi dari atas bukit peluru terbang sampai 30% lebih jauh.
 * **Lubang**: masuk = tewas (unit, kendaraan beserta pengemudinya, dan peti yang dilempar ke dalamnya). Bot menghindarinya; terpental hantaman monster bisa menjatuhkanmu ke lubang.
@@ -67,6 +72,8 @@ Di macOS, saat pertama kali jalan akan muncul dialog firewall *"Allow incoming c
 **Ruang tunggu**: setelah memasukkan nama, semua pemain masuk ruang tunggu (klik kolom tim untuk pindah tim). Ronde baru dimulai (hitung mundur 3 detik) saat **semua** pemain menekan **SIAP**; batal siap menghentikan hitung mundur. Setiap tim mulai **tanpa Buddy** — hanya pemainnya. Opsi *Isi tim kosong dengan CPU* (bawaan aktif): tim tanpa pemain mendapat 1 komandan CPU yang mengumpulkan peti & merakit, dan muncul lagi bila tewas; bila dimatikan, tim kosong langsung gugur (butuh pemain di minimal 2 tim). Selesai ronde, semua kembali ke ruang tunggu.
 
 **Room master** 👑: pemain pertama yang masuk. Hanya room master yang memilih peta dan mengatur opsi CPU; di ruang tunggu ia melihat tombol ✕ (keluarkan pemain) dan 👑 (serahkan master) di samping nama pemain lain. Bisa juga lewat chat: `/kick nama`, `/master nama` (nama boleh awalan saja). Bila room master keluar, jabatan pindah ke pemain yang paling lama di ruangan.
+
+**Event acak (room master)**: di lobby, gunakan sakelar utama untuk semua event atau buka *Pilih event yang boleh muncul* untuk menyalakan/mematikan 12 event satu per satu. Pemain lain hanya melihat pilihan. Perubahan membatalkan Siap/countdown; pengaturan bertahan antar-ronde, ganti peta, dan pergantian master. Event yang dimatikan juga dilewati oleh preview. Peti rutin dan monster penjaga tetap ada.
 
 **Chat** ala Dota: tekan **Enter** untuk chat ke semua, **Shift+Enter** untuk chat tim (Tab di kolom chat = ganti Semua/Tim, Esc = batal). Pesan muncul di kiri bawah lalu memudar; jalan di ruang tunggu dan saat main. Maks 5 pesan per 5 detik.
 
@@ -212,4 +219,4 @@ Cakupan: fase peringatan, gaya tarik dan massa, lengkungan peluru, jalur api, pe
 
 Aset teks dikirim dengan gzip bila browser mendukungnya, hasil kompresi dipakai ulang, dan ETag mengizinkan respons 304 tanpa mengunduh ulang aset yang belum berubah. File yang diedit tetap terdeteksi melalui metadata file; tidak ada build atau dependensi tambahan. Library three.js dimuat lebih awal lewat module preload.
 
-Bentuk senjata/Buddy dan geometri/material pickup digunakan bersama agar spawn/despawn loot tidak terus membuat resource GPU baru. Resource dunia dibersihkan saat berganti peta. Normal permukaan tsunami dihitung maksimal 15 kali/detik; gerakan air tetap diperbarui setiap frame. Lobby/panel patch notes dibatasi 30 FPS, sedangkan render tab tersembunyi dilewati dan input dilepas. Simulasi server tetap 30 tick/detik; resolusi dan kontrol kualitas tidak berubah.
+Bentuk senjata/Buddy dan geometri/material pickup digunakan bersama agar spawn/despawn loot tidak terus membuat resource GPU baru. Resource dunia dibersihkan saat berganti peta. Tembok statis digabung menjadi satu mesh; kanal dan jembatan juga digabung per material. Grid tanah dibatasi 11.011 vertex, tekstur tanah maksimal 2048 × 1536, dan buffer pencarian jalur bot dipakai ulang. Normal permukaan tsunami dihitung maksimal 15 kali/detik; gerakan air tetap diperbarui setiap frame. Lobby/panel patch notes dibatasi 30 FPS, sedangkan render tab tersembunyi dilewati dan input dilepas. Simulasi server tetap 30 tick/detik; resolusi dan kontrol kualitas tidak berubah.

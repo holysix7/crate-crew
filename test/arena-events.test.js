@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const { MAPS } = require('../server/maps');
 const assert = require('node:assert/strict');
 const { Game } = require('../server/game');
 const { EVENT_RULES } = require('../server/arena-events');
@@ -139,7 +140,7 @@ test('new clients receive event rules and active state without an announcement r
 });
 
 test('all three maps and both team counts simulate every event through completion', () => {
-  for (const teams of [2, 4]) for (let map = 0; map < 3; map++) for (const kind of ['blackhole', 'dragon', 'tsunami']) {
+  for (const teams of [2, 3, 4]) for (let map = 0; map < MAPS.length; map++) for (const kind of ['blackhole', 'dragon', 'tsunami']) {
     const g = new Game(teams); g.setMap(map); g.startRound(); g.evtTimer = 999;
     assert.equal(g.randomEvent(kind), true, `${teams} teams / map ${map} / ${kind}`);
     let ticks = 0;
