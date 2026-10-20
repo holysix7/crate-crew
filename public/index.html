@@ -67,7 +67,7 @@
     <div class="card">
       <h1>CRATE<span>CREW</span></h1>
       <p class="sub">Fan-remake LAN · terinspirasi Team Buddies (PS1)</p>
-      <button type="button" class="patch-launch" data-patch-notes><span>BARU · 20 OKT 2026</span><b>Chaos &amp; Loot</b><small>9 event · Kereta Ngepot · Bansos MBG → Lihat patch notes</small></button>
+      <button type="button" class="patch-launch" data-patch-notes><span>BARU · 20 OKT 2026</span><b>Chaos &amp; Loot</b><small>6 peta besar · Kontrol event · Kereta &amp; MBG → Patch notes</small></button>
 
       <div id="join-view">
         <label for="name">Nama</label>
@@ -84,7 +84,8 @@
 
       <div id="room-view" hidden>
         <label>Peta <small id="maps-note" class="muted"></small></label>
-        <div id="maps" class="teams"></div>
+        <div id="maps" class="teams map-cards"></div>
+        <p id="map-description" class="muted map-description"></p>
         <label>Ruang tunggu <small class="muted">· klik tim untuk pindah · 👑 = room master</small></label>
         <div id="room" class="room"></div>
         <label class="check"><input type="checkbox" id="cpu"> Isi tim kosong dengan CPU <small class="muted">(kalau mati, tim tanpa pemain langsung gugur)</small></label>
@@ -133,7 +134,17 @@
       <button type="button" id="patch-close" aria-label="Tutup patch notes" autofocus>✕</button>
     </header>
     <div class="patch-body">
-      <p id="patch-intro">Kereta Ngepot masuk arena! Hindari tabrakan maut, lalu ambil senjata dari Bansos MBG. Loading dan permainan juga dibuat lebih ringan.</p>
+      <p id="patch-intro">Enam peta besar, simetris untuk empat tim! Pilih medan pertempuran, atur event sebagai room master, lalu berebut loot di arena yang lebih luas.</p>
+      <h3>6 medan pertempuran · 2,25× luas arena lama</h3>
+      <ul class="patch-list">
+        <li><b>Lembah Benteng:</b> rumput hijau, benteng berlapis, banyak bukit dan rute sayap.</li>
+        <li><b>Ngarai Raksasa:</b> jurang dalam dengan jembatan tengah dan dua jembatan samping.</li>
+        <li><b>Punggung Es:</b> bukit salju tinggi, dinding es, dan celah beku.</li>
+        <li><b>Sungai Kembar:</b> sungai di tengah, tiga penyeberangan, dan pertempuran di jembatan lebar.</li>
+        <li><b>Kota Reruntuhan:</b> blok kota sebagai cover, gang lebar, dan jalan tengah terbuka.</li>
+        <li><b>Kepulauan Vulkanik:</b> kanal lava, pulau tengah, dan jembatan empat arah.</li>
+        <li>Tepi arena berlekuk mengikuti teluk, tanjung, dan potongan tebing; sungai memiliki tepi berombak. Semua peta <b>72 × 54 petak</b>, dicerminkan ke empat arah untuk 2–4 tim. Markas, pad, jalur bot/kendaraan, bukit tsunami, dan lokasi rebutan event tetap tersedia. Air dalam, lava, dan jurang mematikan; lewat jembatan!</li>
+      </ul>
       <h3>9 event baru di arena</h3>
       <div class="patch-grid">
         <article style="--accent:#ff7058"><span>BARU · PERINGATAN 6 DETIK</span><h4>Kereta Ngepot</h4><p>Kereta masuk, berbelok di jalur melengkung, lalu keluar arena. Jauhi rel merah! Lokomotif dan gerbong membunuh siapa pun yang tertabrak, termasuk LORD dan pengemudi kendaraan. Perisai spawn tidak melindungi.</p></article>
@@ -163,6 +174,7 @@
       </ul>
       <h3>Lebih ringan untuk dimainkan</h3>
       <ul class="patch-list">
+        <li>Tembok statis digabung menjadi satu mesh, detail tanah dan ukuran tekstur dibatasi, geometri/grid peta disimpan, dan pencarian jalur bot memakai ulang memori agar arena besar tetap ringan.</li>
         <li>Unduhan awal lebih kecil dan kunjungan ulang memakai aset yang sudah tersimpan. File game yang berubah tetap diperbarui saat dimuat ulang.</li>
         <li>Senjata, Buddy, dan pickup memakai ulang bentuk yang sama agar tumpukan loot lebih ringan. Aset dibersihkan saat peta diganti.</li>
         <li>Render lobby dan panel patch notes dibatasi 30 FPS. Tab yang tersembunyi berhenti menggambar dan melepas input gerak/tembak; pertandingan di server tetap berjalan.</li>

@@ -10,7 +10,9 @@ const EVENT_OPTIONS = [
 ];
 const ALL_EVENTS_MASK = (1 << EVENT_OPTIONS.length) - 1;
 
-const T = 40, MW = 48, MH = 36, W = MW * T, H = MH * T;
+const { MAPS, TILE: T, COLS: MW, ROWS: MH, outlineFor, rectangles } = require('./maps');
+const W = MW * T, H = MH * T;
+const VOID_HAZARD = { kind: 'void' };
 const TICK = 1 / 30;
 const TEAM_NAMES = ['Merah', 'Biru', 'Hijau', 'Kuning'];
 const TEAM_COLORS = ['#e5484d', '#3e7bfa', '#30a46c', '#f5b400'];
@@ -47,20 +49,6 @@ const ZONE_R = 9.4 * T;
 const isInf = u => u.kind === 'human' || u.kind === 'bot';
 const mass = u => (u.kind === 'turret' || u.neutral ? Infinity : u.kind === 'monster' ? 30 : u.lord || u.kind === 'lord' ? 4 : VEHICLES[u.kind] ? VEHICLES[u.kind].mass : 1);
 
-// Peta: koordinat dalam petak untuk SATU kuadran (kiri atas), lalu dicerminkan ke 4 kuadran.
-// walls [x,y,w,h] · hills [x,y,r,tinggiPx] (bisa dilewati, memperlambat, menambah jarak tembak) · pits [x,y,r] (jatuh = tewas)
-// Area markas (x<13 & y<10) dan zona peti di tengah sengaja dikosongkan dari bukit/lubang.
-const MAPS = [
-  { id: 'lembah', name: 'Lembah Hijau', theme: 'grass',
-    walls: [[13, 2, 1, 5], [3, 11, 5, 1], [15, 9, 3, 3], [19, 4, 2, 2], [8, 15, 2, 2], [20, 13, 1, 3], [23, 17, 2, 2], [10, 7, 2, 1]],
-    hills: [[5, 15, 2.5, 45], [16.5, 6, 2, 40]], pits: [[11, 11.5, 1.8]] },
-  { id: 'kawah', name: 'Kawah Meteor', theme: 'desert',
-    walls: [[13, 2, 1, 4], [3, 12, 4, 1], [19, 5, 2, 2], [9, 16, 2, 1], [22, 16, 2, 2]],
-    hills: [[10.8, 9.8, 2, 50], [17, 14.5, 1.6, 35]], pits: [[15.5, 9, 2.2], [6, 15, 1.8]] },
-  { id: 'salju', name: 'Perbukitan Salju', theme: 'snow',
-    walls: [[13, 3, 1, 3], [20, 13, 1, 3], [2, 11, 3, 1], [23, 17, 2, 2]],
-    hills: [[8, 13.5, 2.6, 55], [16.8, 5, 2.2, 45], [18, 11, 1.8, 40]], pits: [[11, 9, 1.6]] },
-];
 const MIRRORS = [[0, 0], [1, 0], [0, 1], [1, 1]];
 const hillH = (hl, x, y) => { const t = Math.hypot(x - hl.x, y - hl.y) / hl.r; return t < 1 ? hl.h * (0.5 + 0.5 * Math.cos(Math.PI * t)) : 0; };
 const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -125,9 +113,9 @@ function pushOut(u, r, rect) {
 }
 
 function buildMap(teams, def) {
-  const walls = [], hills = [], pits = [];
-  const add = (x, y, w, h) => walls.push({ x: x * T, y: y * T, w: w * T, h: h * T });
-  add(0, 0, MW, 1); add(0, MH - 1, MW, 1); add(0, 1, 1, MH - 2); add(MW - 1, 1, 1, MH - 2);
+  const outline = outlineFor(def), hills = [], pits = [], interior = new Uint8Array(MW * MH);
+  const add = (x,y,w,h) => { for(let ty=y;ty<y+h;ty++)for(let tx=x;tx<x+w;tx++)
+    if(outline.mask[ty*MW+tx]===1)interior[ty*MW+tx]=1; };
   // Rintangan satu kuadran, dicerminkan ke 4 kuadran -> peta simetris & adil
   const seen = new Set();
   for (const [x, y, w, h] of def.walls) {
@@ -156,8 +144,18 @@ function buildMap(teams, def) {
     const cx = hq.x + hq.w / 2, cy = hq.y + hq.h / 2;
     bases.push({ team: t, hq, dx: c.dx, dy: c.dy, pad: { x: cx + c.dx * 5 * T, y: cy }, spawn: { x: cx + c.dx * 3 * T, y: cy + c.dy * 2.5 * T } });
   }
-  return { walls, bases, hills, pits };
+  const hazards = (def.channels || []).map(([x,y,w,h]) => ({ x:x*T, y:y*T, w:w*T, h:h*T, kind:def.hazard, depth:def.depth }));
+  const bridges = (def.bridges || []).map(([x,y,w,h]) => ({ x:x*T, y:y*T, w:w*T, h:h*T }));
+  return { walls: [...outline.walls, ...rectangles(interior,1)], bases, hills, pits, hazards, bridges, outside: outline.outside, arenaMask: outline.mask };
 }
+
+// Static geometry is built once; only base selection and mutable simulation state vary per room.
+const MAP_GEOMETRY = MAPS.map(def => buildMap(4, def));
+const MAP_BLOCKED = new Map();
+const MAP_CATALOG = MAPS.map((def, i) => {
+  const { arenaMask, ...preview } = MAP_GEOMETRY[i];
+  return { id: def.id, name: def.name, theme: def.theme, tag: def.tag, desc: def.desc, w: W, h: H, preview };
+});
 
 class Game {
   constructor(teams, { firstEvent = null } = {}) {
@@ -180,33 +178,50 @@ class Game {
 
   setMap(i) {
     this.mapIdx = i;
-    const m = buildMap(this.teams, MAPS[i]);
-    this.walls = m.walls; this.bases = m.bases; this.hills = m.hills; this.pits = m.pits;
+    const geometry = MAP_GEOMETRY[i], m = { ...geometry, bases: geometry.bases.slice(0, this.teams) };
+    this.walls = m.walls; this.bases = m.bases; this.hills = m.hills; this.pits = m.pits; this.hazards = m.hazards; this.bridges = m.bridges; this.outside = m.outside; this.arenaMask = m.arenaMask;
     this.solids = [...this.walls, ...this.bases.map(b => b.hq)];
-    // grid pathfinding: tembok + lubang (dengan margin badan unit) tidak bisa dilewati
-    this.blocked = new Uint8Array(MW * MH);
-    for (let ty = 0; ty < MH; ty++) for (let tx = 0; tx < MW; tx++) {
-      const cx = (tx + 0.5) * T, cy = (ty + 0.5) * T;
-      if (this.solids.some(s => inRect(cx, cy, s)) || this.inPit(cx, cy, -(UNIT_R + 6))) this.blocked[ty * MW + tx] = 1;
-    }
-  }
-  mapInfo() {
-    const d = MAPS[this.mapIdx];
-    return { w: W, h: H, tile: T, walls: this.walls, bases: this.bases, crateH: CRATE_H, hills: this.hills, pits: this.pits,
+    const d = MAPS[i];
+    this.mapMeta = { w: W, h: H, tile: T, walls: this.walls, bases: this.bases, crateH: CRATE_H,
+      hills: this.hills, pits: this.pits, hazards: this.hazards, bridges: this.bridges, outside: this.outside, desc: d.desc, tag: d.tag,
       id: d.id, name: d.name, theme: d.theme, zone: ZONE_R };
+    // grid pathfinding: tembok + lubang (dengan margin badan unit) tidak bisa dilewati
+    const blockKey = `${i}:${this.teams}`, cached = MAP_BLOCKED.get(blockKey);
+    this.blocked = cached ? new Uint8Array(cached) : new Uint8Array(MW * MH);
+    // Scratch memory is reused by sequential bot searches, rather than allocated per path.
+    this.pathPrev = new Int32Array(MW * MH);
+    this.pathQueue = new Int32Array(MW * MH);
+    this.pathVisited = new Uint32Array(MW * MH);
+    this.pathEpoch = 0;
+    if (!cached) for (let ty = 0; ty < MH; ty++) for (let tx = 0; tx < MW; tx++) {
+      const cx = (tx + 0.5) * T, cy = (ty + 0.5) * T;
+      if (this.solids.some(s => rectDist(cx, cy, s) < 20) || this.inPit(cx, cy, -(UNIT_R + 6))) this.blocked[ty * MW + tx] = 1;
+    }
+    if (!cached) MAP_BLOCKED.set(blockKey, new Uint8Array(this.blocked));
   }
+  mapInfo() { return this.mapMeta; }
   welcome() {
     return JSON.stringify({
       t: 'welcome', teams: this.teams, colors: TEAM_COLORS.slice(0, this.teams), names: TEAM_NAMES.slice(0, this.teams), weapons: WLIST,
       arenaEvents: EVENT_RULES,
       eventOptions: EVENT_OPTIONS,
-      map: this.mapInfo(), maps: MAPS.map(m => ({ id: m.id, name: m.name })), hqMax: HQ_HP,
+      map: this.mapInfo(), maps: MAP_CATALOG, hqMax: HQ_HP,
       wlabels: WLIST.map(k => WEAPONS[k].label), recipes: RECIPES.map(({ id, name, desc, lo, hi }) => ({ id, name, desc, lo, hi })),
     });
   }
   // margin > 0 = toleransi di tepi (masih aman), margin < 0 = lubang dianggap lebih besar
   inPit(x, y, margin = 0) {
     for (const p of this.pits) if (Math.hypot(x - p.x, y - p.y) < p.r - margin) return p;
+    for (const p of this.hazards || []) if (x >= p.x + margin && x <= p.x + p.w - margin && y >= p.y + margin && y <= p.y + p.h - margin) return p;
+    // Shore tolerance shrinks the union, not each segment separately: shared
+    // edges must remain lethal even when the physics uses a positive margin.
+    if (margin > 0) {
+      const contains = (px,py,p) => px >= p.x && px <= p.x+p.w && py >= p.y && py <= p.y+p.h;
+      const hit = this.hazards.find(p=>contains(x,y,p));
+      if (hit && [[x-margin,y],[x+margin,y],[x,y-margin],[x,y+margin]].every(([px,py])=>this.hazards.some(p=>contains(px,py,p)))) return hit;
+    }
+    const tx = Math.floor(x / T), ty = Math.floor(y / T);
+    if (tx < 0 || ty < 0 || tx >= MW || ty >= MH || this.arenaMask[ty*MW+tx] === 0) return VOID_HAZARD;
     return null;
   }
   heightAt(x, y) { let h = 0; for (const hl of this.hills) h += hillH(hl, x, y); return h; }
@@ -912,9 +927,11 @@ class Game {
     const s = { x: clamp((sx / T) | 0, 0, MW - 1), y: clamp((sy / T) | 0, 0, MH - 1) };
     const g = { x: clamp((gx / T) | 0, 0, MW - 1), y: clamp((gy / T) | 0, 0, MH - 1) };
     const si = s.y * MW + s.x, gi = g.y * MW + g.x, gBlocked = this.blocked[gi];
-    const prev = new Int32Array(MW * MH).fill(-1), q = new Int32Array(MW * MH);
+    const prev = this.pathPrev, q = this.pathQueue, visited = this.pathVisited;
+    if (++this.pathEpoch >= 0xffffffff) { visited.fill(0); this.pathEpoch = 1; }
+    const epoch = this.pathEpoch;
     let h = 0, tl = 0, found = -1;
-    prev[si] = si; q[tl++] = si;
+    prev[si] = si; visited[si] = epoch; q[tl++] = si;
     while (h < tl) {
       const c = q[h++], cx = c % MW, cy = (c / MW) | 0;
       if (c === gi || (gBlocked && Math.max(Math.abs(cx - g.x), Math.abs(cy - g.y)) <= 1)) { found = c; break; }
@@ -922,8 +939,8 @@ class Game {
         const nx = cx + dx, ny = cy + dy;
         if (nx < 0 || ny < 0 || nx >= MW || ny >= MH) continue;
         const ni = ny * MW + nx;
-        if (prev[ni] !== -1 || this.blocked[ni]) continue;
-        prev[ni] = c; q[tl++] = ni;
+        if (visited[ni] === epoch || this.blocked[ni]) continue;
+        prev[ni] = c; visited[ni] = epoch; q[tl++] = ni;
       }
     }
     if (found < 0) return null;
@@ -1186,6 +1203,7 @@ class Game {
       u.x = clamp(u.x, T, W - T); u.y = clamp(u.y, T, H - T);
       if (u.kind === 'monster') {
         // monster terlalu besar untuk jatuh: didorong keluar dari lubang
+        for (const rect of this.hazards) pushOut(u, u.r, rect);
         for (const p of this.pits) { const d = Math.hypot(u.x - p.x, u.y - p.y) || 1; if (d < p.r + u.r) { u.x = p.x + (u.x - p.x) / d * (p.r + u.r); u.y = p.y + (u.y - p.y) / d * (p.r + u.r); } }
       } else if (u.kind !== 'turret' && !u.neutral && this.units.has(u.id) && this.inPit(u.x, u.y, 6)) {
         this.events.push({ k: 'fall', x: r1(u.x), y: r1(u.y) });

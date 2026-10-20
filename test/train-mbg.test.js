@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const { MAPS } = require('../server/maps');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
@@ -125,13 +126,13 @@ test('MBG automatic pickup notifies the collector once; ordinary pickups never s
 });
 
 test('train and MBG finish on all maps/team counts and work in the preview queue', () => {
-  for (const teams of [2, 4]) for (let map = 0; map < 3; map++) for (const kind of ['train', 'mbg']) {
+  for (const teams of [2, 3, 4]) for (let map = 0; map < MAPS.length; map++) for (const kind of ['train', 'mbg']) {
     const g = new Game(teams, { firstEvent: [kind, kind === 'train' ? 'mbg' : 'train'] });
     g.setMap(map); g.startRound(); g.evtTimer = 0;
     g.tick(); assert.equal(g.arenaEvents.active.kind, kind);
     if (kind === 'train') {
       const e = g.arenaEvents.active, { w, h, tile } = g.mapInfo();
-      const inside = g.solids.filter(s => s.x > tile && s.y > tile && s.x + s.w < w - tile && s.y + s.h < h - tile);
+      const inside = g.solids.filter(s => !s.boundary && s.x > tile && s.y > tile && s.x + s.w < w - tile && s.y + s.h < h - tile);
       for (let i = 0; i <= 150; i++) {
         const p = trainPoint(e, e.length * i / 150);
         assert.ok(!inside.some(s => p.x > s.x - 24 && p.x < s.x + s.w + 24 && p.y > s.y - 24 && p.y < s.y + s.h + 24), 'rails clear interior walls and HQs');

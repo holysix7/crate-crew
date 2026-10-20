@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const { MAPS } = require('../server/maps');
 const assert = require('node:assert/strict');
 const { Game, WEAPONS } = require('../server/game');
 const { LORD } = require('../server/encounters');
@@ -163,17 +164,18 @@ test('LORD remains after its arrival announcement, and another cannot spawn whil
 });
 
 test('tsunami redistributes swept wood and metal in symmetric, safe groups on every map', () => {
-  for (const teams of [2, 4]) for (let map = 0; map < 3; map++) {
+  for (const teams of [2, 3, 4]) for (let map = 0; map < MAPS.length; map++) {
     const g = new Game(teams); g.setMap(map); g.clearWorld(); g.state = 'playing'; g.randomEvent('tsunami');
     const e = g.arenaEvents.active;
     for (let i = 0; i < 8; i++) { const c = g.createCrate(900, 700, { state: 'washed', metal: i < 3 }); e.swept.add(c.id); }
     const pad = g.createCrate(200, 200, { state: 'pad' }); g.pads[0][0] = pad.id;
     g.arenaEvents.finish(); const crates = [...g.crates.values()].filter(c => c.id !== pad.id);
+    const { w, h } = g.mapInfo();
     const quadrants = [0, 0, 0, 0], metal = [0, 0, 0, 0];
     for (const c of crates) {
       assert.equal(c.state, 'air'); assert.ok(g.encounters.validSpot(c.x, c.y));
-      const q = (c.x > 960 ? 1 : 0) + (c.y > 720 ? 2 : 0); quadrants[q]++; if (c.metal) metal[q]++;
-      assert.ok(crates.some(other => Math.abs(other.x - (1920 - c.x)) < 1e-6 && Math.abs(other.y - (1440 - c.y)) < 1e-6 && !!other.metal === !!c.metal));
+      const q = (c.x > w / 2 ? 1 : 0) + (c.y > h / 2 ? 2 : 0); quadrants[q]++; if (c.metal) metal[q]++;
+      assert.ok(crates.some(other => Math.abs(other.x - (w - c.x)) < 1e-6 && Math.abs(other.y - (h - c.y)) < 1e-6 && !!other.metal === !!c.metal));
     }
     assert.equal(new Set(quadrants).size, 1); assert.equal(new Set(metal).size, 1); assert.equal(pad.state, 'pad');
   }
@@ -186,7 +188,7 @@ test('encounter snapshots and round reset preserve no dangling abducted players 
   const snapshot = JSON.parse(g.snapshot()); assert.equal(snapshot.A, null); assert.deepEqual(snapshot.D, []); assert.deepEqual(snapshot.U, []);
 });
 test('all new events simulate to completion in all maps and team counts', () => {
-  for (const teams of [2, 4]) for (let map = 0; map < 3; map++) for (const kind of ['ufo', 'airdrop', 'chickens', 'lord']) {
+  for (const teams of [2, 3, 4]) for (let map = 0; map < MAPS.length; map++) for (const kind of ['ufo', 'airdrop', 'chickens', 'lord']) {
     const g = new Game(teams); g.setMap(map); g.startRound(); g.evtTimer = 99999;
     assert.equal(g.randomEvent(kind), true);
     let ticks = 0;
